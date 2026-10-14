@@ -1,0 +1,12 @@
+{
+  "appId": "com.d3athstroke25.kinboard",
+  "appName": "Kinboard",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#EDF1EE"
+  },
+  "plugins": {
+    "LocalNotifications": {}
+  }
+}
