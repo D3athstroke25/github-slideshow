@@ -71,7 +71,7 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .app{display:grid;grid-template-columns:1fr;height:100%}
 main{min-width:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
 .wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(6,1fr);
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(7,1fr);
   background:var(--surface);border-top:1px solid var(--line);
   padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
 .tab{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:12px;color:var(--muted);font-size:11px;font-weight:600}
@@ -261,6 +261,28 @@ textarea{height:auto;padding:10px 12px;min-height:70px;resize:vertical}
 body.setup-mode nav.tabs,body.setup-mode header.top{display:none}
 body.setup-mode main{padding-top:env(safe-area-inset-top,0px)}
 body.setup-mode .app{grid-template-columns:1fr}
+.todayhead{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding-block:14px 12px}
+.todayhead h2{font-family:var(--f-display);font-weight:400;font-size:22px;margin:0}
+.strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.strip .trow{width:auto;margin:0}
+.today-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;align-items:start}
+.tcol h4{margin:12px 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.trow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border-radius:10px;background:var(--mb);color:var(--mi);margin-bottom:6px}
+.trow .t{font-size:12.5px;font-weight:600;white-space:nowrap;min-width:58px}
+.trow b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow.past{opacity:.45}
+.trow.now{box-shadow:0 0 0 2px var(--mi)}
+.trow.dinner{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.nowtag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--mi);color:var(--mb)}
+.alldone{margin:10px 0 0;font-weight:700;color:var(--mi)}
+body.wall{font-size:16px;--hour:max(34px,calc((100dvh - 330px) / 17))}
+body.wall .tab{font-size:13px}
+body.wall .tab svg{width:26px;height:26px}
+body.wall .chore{padding:11px 6px}
+body.wall .tick{width:32px;height:32px}
+body.wall .trow{padding:10px 12px}
+body.wall .todayhead h2{font-size:28px}
+.sleepscreen.night{background:#000;color:#8a958f}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -313,6 +335,7 @@ const I = {
   list:'<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
   meal:'<path d="M7 3v8a2 2 0 0 0 2 2v8M11 3v8M7 7h4M17 21V3c-2 0-3 3-3 7h3"/>',
   gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   left:'<path d="M15 18l-6-6 6-6"/>', right:'<path d="M9 18l6-6-6-6"/>',
   check:'<path d="M5 12l5 5L20 7"/>', pen:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
@@ -427,6 +450,9 @@ function initStore() {
   if (famCode) return startCloud();
   if (lsGet('kb-localonly', false)) { mode = 'local'; loadLocal(); return render(); }
   mode = 'setup'; render();
+  // Opening an invite link (…#join-CODE) joins straight away: handy on a wall screen with no keyboard.
+  const inv = normCode((location.hash.match(/join-([A-Za-z0-9-]+)/) || [])[1] || '');
+  if (inv.length === 16) joinFamily(inv, { disabled: false });
 }
 async function createFamily(btn) {
   btn.disabled = true;
@@ -446,6 +472,7 @@ async function joinFamily(raw, btn) {
   try {
     await rpc('kb_check', { code });
     famCode = code; lsSet('kb-code', famCode); lsSet('kb-localonly', false); wipeLocal();
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
     ui.tab = 'calendar'; startCloud(); toast('Joined. Loading your family board…');
   } catch (e) {
     btn.disabled = false;
@@ -533,6 +560,8 @@ function occursOn(e, day) {
   if (rep === 'yearly') return a.getDate() === b.getDate() && a.getMonth() === b.getMonth();
   return false;
 }
+const evSort = (a, b) => (a.allDay === b.allDay ? 0 : a.allDay ? -1 : 1) || (a.start || '').localeCompare(b.start || '');
+const allEventsOn = day => all('events').filter(e => occursOn(e, day)).sort(evSort);
 function eventsOn(day) {
   const f = ui.filter;
   return all('events').filter(e => occursOn(e, day) && (!f.size || !(e.memberIds || []).length || e.memberIds.some(m => f.has(m))))
@@ -563,11 +592,11 @@ function starBalance(mid) {
 
 /* ---------- ui state ---------- */
 const ui = {
-  tab: lsGet('kb-tab', 'calendar'),
+  tab: lsGet('kb-tab', 'today'),
   calMode: lsGet('kb-cal', isWide() ? 'week' : 'day'),
   cursor: today(), filter: new Set(), choreDay: today(), listId: lsGet('kb-list', null), mealWeek: mondayOf(today()),
 };
-const TABS = [['calendar','Calendar','cal'],['chores','Chores','chores'],['rewards','Rewards','star'],['lists','Lists','list'],['meals','Meals','meal'],['settings','Family','gear']];
+const TABS = [['today','Today','sun'],['calendar','Calendar','cal'],['chores','Chores','chores'],['rewards','Rewards','star'],['lists','Lists','list'],['meals','Meals','meal'],['settings','Family','gear']];
 
 let rq = 0;
 function queueRender() { if (!rq) rq = requestAnimationFrame(() => { rq = 0; render(); }); }
@@ -609,7 +638,7 @@ function render() {
   if (mode === 'setup') { $('#top').innerHTML = ''; view.innerHTML = vSetup(); $('#fab').hidden = true; const j = $('#joinCode'); if (j && vals.joinCode) j.value = vals.joinCode; return; }
   renderNav(); renderTop();
   if (mode === 'loading') return;
-  const fn = { calendar: vCalendar, chores: vChores, rewards: vRewards, lists: vLists, meals: vMeals, settings: vSettings }[ui.tab] || vCalendar;
+  const fn = { today: vToday, calendar: vCalendar, chores: vChores, rewards: vRewards, lists: vLists, meals: vMeals, settings: vSettings }[ui.tab] || vCalendar;
   view.innerHTML = (canWrite ? '' : `<div class="banner">You can view this board. Ask the owner for Contributor access to make changes.</div>`) + fn();
   Object.entries(vals).forEach(([id, v]) => { const i = document.getElementById(id); if (i && i.type !== 'file') i.value = v; });
   if (actId) { const i = document.getElementById(actId); if (i) i.focus(); }
@@ -628,6 +657,36 @@ function vSetup() {
     <section class="card"><h3>Start a new family</h3><p class="note">Creates a private family board and gives you a code to share.</p><button class="btn primary" data-act="fam-create">Create family</button></section>
     <button class="btn" data-act="fam-local" style="justify-self:center">Use on this device only, without sync</button>
   </div>`;
+}
+
+/* ---------- today: the whole family's day at a glance ---------- */
+function vToday() {
+  if (!members().length) return onboarding();
+  const d = today(), n = new Date(), nowM = n.getHours() * 60 + n.getMinutes();
+  const evs = allEventsOn(d), ms = members();
+  const fam = evs.filter(e => !(e.memberIds || []).some(member));
+  const dinner = get('meals', `${d}_dinner`);
+  const evRow = e => {
+    const s = e.allDay ? -1 : toMin(e.start), en = e.allDay ? 1440 : toMin(e.end || e.start);
+    const st = e.allDay ? '' : en <= nowM ? 'past' : s <= nowM ? 'now' : '';
+    const c = evStyle(e);
+    return `<button class="trow ${c.cls} ${st}" style="${c.style}" data-act="ev" data-id="${e.id}"><span class="t tn">${e.allDay ? 'All day' : fmtT(e.start)}</span><b>${esc(e.title)}</b>${st === 'now' ? '<span class="nowtag">Now</span>' : ''}</button>`;
+  };
+  const choreRow = c => `<button class="chore ${isDone(d, c.id) ? 'done' : ''}" data-act="chore-toggle" data-id="${c.id}" data-day="${d}"><span class="tick">${svg('check', 3)}</span><span class="ct">${esc(c.title)}</span>${Number(c.stars) ? `<span class="stars">★ ${c.stars}</span>` : ''}</button>`;
+  const anyone = all('chores').filter(c => !c.memberId && choreOn(c, d));
+  return `<div class="todayhead"><h2>${DOWL[n.getDay()]}, ${MON[n.getMonth()]} ${n.getDate()}</h2>
+    <div class="strip">${fam.map(evRow).join('')}${dinner ? `<button class="trow dinner" data-act="tab" data-id="meals"><span class="t">Dinner</span><b>${esc(dinner.text)}</b></button>` : ''}${anyone.length ? `<span class="note">${anyone.filter(c => isDone(d, c.id)).length}/${anyone.length} family chores done</span>` : ''}</div></div>
+  <div class="today-grid">${ms.map(m => {
+    const mine = evs.filter(e => (e.memberIds || []).includes(m.id));
+    const ch = all('chores').filter(c => c.memberId === m.id && choreOn(c, d)).sort((a, b) => ['morning', 'afternoon', 'evening', 'any'].indexOf(a.when || 'any') - ['morning', 'afternoon', 'evening', 'any'].indexOf(b.when || 'any'));
+    const done = ch.filter(c => isDone(d, c.id)).length;
+    return `<section class="card tcol m c-${m.color}"><div class="mhead">${avatar(m.id)}<div style="flex:1;min-width:0"><h3>${esc(m.name)}</h3><div class="meta tn">${ch.length ? `${done} of ${ch.length} chores` : 'No chores today'} · <span class="stars">★ ${starBalance(m.id).bal}</span></div></div></div>
+      ${ch.length ? `<div class="bar"><i style="width:${done / ch.length * 100}%"></i></div>` : ''}
+      <h4>Schedule</h4>${mine.length ? mine.map(evRow).join('') : '<p class="note">Nothing scheduled</p>'}
+      ${ch.length ? `<h4>Chores</h4>${ch.map(choreRow).join('')}` : ''}
+      ${ch.length && done === ch.length ? '<p class="alldone">All done today!</p>' : ''}
+    </section>`;
+  }).join('')}${anyone.length ? `<section class="card tcol m c-slate"><div class="mhead"><span class="av">★</span><div><h3>Anyone</h3><div class="meta">Shared chores</div></div></div>${anyone.map(choreRow).join('')}</section>` : ''}</div>`;
 }
 
 /* ---------- calendar ---------- */
@@ -774,7 +833,12 @@ function vSettings() {
   <section class="card"><h3>Household</h3><form data-form="family" style="margin-top:12px"><label class="field"><span>Family name</span><input type="text" id="famName" value="${esc(familyName())}" ${canWrite ? '' : 'disabled'}></label>${canWrite ? '<button class="btn primary" type="submit">Save name</button>' : ''}</form></section>
   <section class="card"><h3>People</h3><div style="margin-top:10px">${ms.map(m => `<div class="reward">${avatar(m.id)}<span class="ct"><b>${esc(m.name)}</b><small class="note">${m.role ? esc(m.role) : ''}</small></span>${canWrite ? `<button class="btn" data-act="member-edit" data-id="${m.id}">Edit</button>` : ''}</div>`).join('') || '<p class="note">No one added yet.</p>'}</div>${canWrite ? '<button class="btn primary" data-act="member-new" style="margin-top:10px">Add person</button>' : ''}</section>
   <section class="card"><h3>Import a calendar</h3><p class="note">Export an .ics file from Google Calendar (Settings → Import & export) or Apple Calendar (File → Export), then bring it in here. Re-importing the same file updates events instead of duplicating them.</p>${canWrite ? '<button class="btn primary" data-act="ics">Import .ics file</button>' : ''}</section>
-  <section class="card"><h3>Wall display</h3><p class="note">Mount an old tablet on the wall: open this board, then use Sleep for a dim clock that shows the next event. Keep screen awake stops the tablet from locking while the board is open.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="sleep">Start sleep screen</button><button class="btn" data-act="wakelock">${wakeLock ? 'Screen stays awake ✓' : 'Keep screen awake'}</button><button class="btn" data-act="theme">Theme: ${({ light: 'Light', dark: 'Dark' })[document.documentElement.dataset.theme] || 'System'}</button></div></section>
+  <section class="card"><h3>Wall display</h3><p class="note">For a touchscreen mounted at home. These settings apply to this screen only.</p>
+    <label class="check"><input type="checkbox" id="wallOn" data-wall="on" ${wall.on ? 'checked' : ''}> Wall display mode</label>
+    <p class="note" style="margin-top:-6px">Larger text and touch targets, keeps the screen on, goes back to Today after
+      <select id="idleMin" data-wall="idle" style="width:auto;height:34px">${[1, 2, 5, 10].map(v => `<option value="${v}" ${wall.idleMin === v ? 'selected' : ''}>${v}</option>`).join('')}</select> min without a touch, and reloads at 3:30 AM to pick up app updates.</p>
+    <label class="check"><input type="checkbox" id="nightOn" data-wall="night" ${wall.nightOn ? 'checked' : ''}> Night clock from <input type="time" id="nightFrom" data-wall="from" value="${wall.from}" style="width:auto"> to <input type="time" id="nightTo" data-wall="to" value="${wall.to}" style="width:auto"></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="sleep">Show sleep clock now</button><button class="btn" data-act="fullscreen">Full screen</button><button class="btn" data-act="theme">Theme: ${({ light: 'Light', dark: 'Dark' })[document.documentElement.dataset.theme] || 'System'}</button></div></section>
   <section class="card"><h3>Family sync</h3>
     ${mode === 'cloud' ? `<p class="note">Everyone who enters this code in Kinboard sees and edits the same board. Treat it like a house key: anyone with it can see your family's calendar.</p>
       <div class="code tn" id="famCodeShow">${fmtCode(famCode)}</div>
@@ -1055,15 +1119,15 @@ document.addEventListener('click', async ev => {
       const r = el.getBoundingClientRect(), hourPx = r.height / (H1 - H0);
       const m = Math.max(H0 * 60, Math.min((H1 - 1) * 60, H0 * 60 + Math.floor((ev.clientY - r.top) / hourPx * 2) * 30));
       editEvent(null, { date: id, start: fromMin(m), end: fromMin(m + 60) }); break; }
-    case 'fab': ({ calendar: () => editEvent(null), chores: () => editChore(null), rewards: () => editReward(null), lists: () => all('lists').length ? $('#itemText')?.focus() : editList(null), meals: () => editMeal(`${today()}_dinner`) })[ui.tab]?.(); break;
+    case 'fab': ({ today: () => editEvent(null), calendar: () => editEvent(null), chores: () => editChore(null), rewards: () => editReward(null), lists: () => all('lists').length ? $('#itemText')?.focus() : editList(null), meals: () => editMeal(`${today()}_dinner`) })[ui.tab]?.(); break;
     case 'member-new': editMember(null); break;
     case 'member-edit': editMember(id); break;
     case 'chore-new': editChore(null); break;
     case 'chore-edit': editChore(id); break;
     case 'chore-toggle': {
-      const c = get('chores', id), k = doneKey(ui.choreDay, id);
+      const day = el.dataset.day || ui.choreDay, c = get('chores', id), k = doneKey(day, id);
       if (S.completions.has(k)) del('completions', k);
-      else { put('completions', k, { choreId: id, date: ui.choreDay, memberId: c.memberId || '', stars: Number(c.stars) || 0, at: Date.now() }); if (Number(c.stars) && c.memberId) toast(`+${c.stars} ★ for ${(member(c.memberId) || {}).name}`); }
+      else { put('completions', k, { choreId: id, date: day, memberId: c.memberId || '', stars: Number(c.stars) || 0, at: Date.now() }); if (Number(c.stars) && c.memberId) toast(`+${c.stars} ★ for ${(member(c.memberId) || {}).name}`); }
       break; }
     case 'chore-prev': ui.choreDay = addDays(ui.choreDay, -1); render(); break;
     case 'chore-next': ui.choreDay = addDays(ui.choreDay, 1); render(); break;
@@ -1086,18 +1150,15 @@ document.addEventListener('click', async ev => {
     case 'sample-load': loadSample(); break;
     case 'sample-clear': if (el.classList.contains('armed')) clearSample(); else { el.classList.add('armed'); el.textContent = 'Tap again to remove'; } break;
     case 'sleep': renderSleep(); $('#sleep').hidden = false; break;
-    case 'wake': $('#sleep').hidden = true; break;
-    case 'wakelock':
-      try { if (wakeLock) { await wakeLock.release(); wakeLock = null; } else { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; render(); }); } }
-      catch { toast('This device does not allow keeping the screen awake from here.'); }
-      render(); break;
+    case 'wake': $('#sleep').hidden = true; $('#sleep').classList.remove('night'); break;
+    case 'fullscreen': try { await (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()); } catch { toast('Full screen is not available here. On iPad, add Kinboard to the Home Screen instead.'); } break;
     case 'fam-create': createFamily(el); break;
     case 'fam-local': lsSet('kb-localonly', true); mode = 'local'; loadLocal(); render(); break;
     case 'fam-joinscreen': mode = 'setup'; render(); break;
     case 'fam-copy': try { await navigator.clipboard.writeText(fmtCode(famCode)); toast('Code copied'); } catch { const r = document.createRange(); r.selectNodeContents($('#famCodeShow')); getSelection().removeAllRanges(); getSelection().addRange(r); toast('Code selected. Tap Copy.'); } break;
     case 'fam-share': {
-      const text = `Join our family board on Kinboard. Family code: ${fmtCode(famCode)}`;
-      try { if (Native && Native.Plugins.Share) await Native.Plugins.Share.share({ title: 'Kinboard family code', text }); else if (navigator.share) await navigator.share({ title: 'Kinboard family code', text, url: (CFG.appUrl || location.href.split('#')[0]) }); else { await navigator.clipboard.writeText(text); toast('Invite copied'); } } catch {}
+      const text = `Join our family board on Kinboard. Family code: ${fmtCode(famCode)}\nOr open: ${(CFG.appUrl || location.href.split('#')[0])}#join-${famCode}`;
+      try { if (Native && Native.Plugins.Share) await Native.Plugins.Share.share({ title: 'Kinboard family code', text }); else if (navigator.share) await navigator.share({ title: 'Kinboard family code', text, url: `${(CFG.appUrl || location.href.split('#')[0])}#join-${famCode}` }); else { await navigator.clipboard.writeText(text); toast('Invite copied'); } } catch {}
       break; }
     case 'sync-now': await push(); await pull(); toast(syncState === 'offline' ? 'Offline. Changes will upload when you reconnect.' : 'Up to date'); render(); break;
     case 'fam-leave': if (el.classList.contains('armed')) leaveFamily(); else { el.classList.add('armed', 'danger'); el.textContent = 'Tap again to leave'; } break;
@@ -1123,12 +1184,51 @@ document.addEventListener('submit', ev => {
   }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#scrim').hidden) closeSheet(); else $('#sleep').hidden = true; } });
-document.addEventListener('visibilitychange', async () => { if (wakeLock === null && document.visibilityState === 'visible' && lsGet('kb-wl', false)) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch {} } });
+/* ---------- wall display mode ---------- */
+const wall = { on: lsGet('kb-wall', false), idleMin: lsGet('kb-idle', 2), nightOn: lsGet('kb-night-on', false), from: lsGet('kb-night-from', '21:30'), to: lsGet('kb-night-to', '06:30') };
+let lastTouch = Date.now(), lastDay = today(), lastMin = -1;
+const loadedAt = Date.now();
+['pointerdown', 'keydown', 'wheel'].forEach(t => addEventListener(t, () => { lastTouch = Date.now(); }, { passive: true, capture: true }));
+async function keepAwake() {
+  if (!wall.on || wakeLock || document.visibilityState !== 'visible') return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } catch {}
+}
+function applyWall() { document.body.classList.toggle('wall', wall.on); if (wall.on) keepAwake(); else if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
+function inNight() { const n = new Date(), m = n.getHours() * 60 + n.getMinutes(), a = toMin(wall.from), b = toMin(wall.to); return a <= b ? m >= a && m < b : m >= a || m < b; }
+function wallTick() {
+  if (mode === 'setup' || mode === 'loading') return;
+  const idle = Date.now() - lastTouch, sl = $('#sleep'), n = new Date();
+  if (lastDay !== today()) { // midnight: move "today" views forward
+    if (ui.cursor === lastDay) ui.cursor = today();
+    if (ui.choreDay === lastDay) ui.choreDay = today();
+    lastDay = today(); render();
+  }
+  if (wall.on && idle > wall.idleMin * 60000 && (ui.tab !== 'today' || ui.filter.size || !$('#scrim').hidden)) {
+    closeSheet(); ui.tab = 'today'; ui.cursor = today(); ui.choreDay = today(); ui.mealWeek = mondayOf(today()); ui.filter.clear(); $('#main').scrollTop = 0; render();
+  } else if (ui.tab === 'today' && $('#scrim').hidden && n.getMinutes() !== lastMin) { lastMin = n.getMinutes(); render(); }
+  if (wall.on && wall.nightOn) {
+    if (inNight() && idle > 60000 && sl.hidden) { renderSleep(); sl.classList.add('night'); sl.hidden = false; }
+    else if (!inNight() && sl.classList.contains('night') && !sl.hidden) { sl.hidden = true; sl.classList.remove('night'); }
+  }
+  if (wall.on && !Native && n.getHours() === 3 && n.getMinutes() >= 30 && n.getMinutes() < 40 && Date.now() - loadedAt > 3600000 && navigator.onLine) location.reload();
+}
+setInterval(wallTick, 15000);
+document.addEventListener('visibilitychange', keepAwake);
+document.addEventListener('change', e => {
+  const k = e.target.dataset && e.target.dataset.wall; if (!k) return;
+  const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  if (k === 'on') { wall.on = v; lsSet('kb-wall', v); applyWall(); toast(v ? 'Wall display mode on' : 'Wall display mode off'); }
+  if (k === 'idle') { wall.idleMin = Number(v); lsSet('kb-idle', wall.idleMin); }
+  if (k === 'night') { wall.nightOn = v; lsSet('kb-night-on', v); }
+  if (k === 'from' && v) { wall.from = v; lsSet('kb-night-from', v); }
+  if (k === 'to' && v) { wall.to = v; lsSet('kb-night-to', v); }
+});
 let lastWide = isWide();
 addEventListener('resize', () => { if (isWide() !== lastWide) { lastWide = isWide(); render(); } });
 
 const th = lsGet('kb-theme', ''); if (th) document.documentElement.dataset.theme = th;
 setInterval(tickClock, 20000);
+applyWall();
 if (!Native && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 initStore();
 })();

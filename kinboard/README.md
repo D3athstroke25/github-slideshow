@@ -6,6 +6,7 @@ A family calendar, chore chart, rewards, lists and meal planner, inspired by wal
 |---|---|
 | `web/` | The app itself: a single-page app that works offline and can be added to the Home Screen. It is deployed to GitHub Pages. |
 | `native/` | A Capacitor project that wraps `web/` as a real iOS app for TestFlight and the App Store. |
+| `kiosk/` | Setup script that turns a Raspberry Pi and touchscreen into a wall display. |
 | `artifact/` | The original claude.ai prototype. |
 
 Family sync uses the Supabase project **kinboard** (`bmmjtouptvkfxxlfqenm`). There are no logins. Each family gets a secret 16-character code, and every read and write goes through database functions that require that code. Clients cannot read the tables directly.
@@ -70,6 +71,37 @@ After any change to `web/`, run `npm run ios` again.
 5. Submit for review.
 
 Native features already built in: event reminders as local notifications (**Family → Reminders**), the iOS share sheet for the family code, offline use, and the app bundled on the device rather than loaded from a website. These help with App Store guideline 4.2, "minimum functionality". Good next native features: Home Screen widgets for today's events and chores, and live Apple Calendar sync through EventKit.
+
+## 3. Wall-mounted touchscreen (the family hub)
+
+Turn on **Family → Wall display → Wall display mode** on the wall screen. That setting applies to that screen only. In wall mode:
+- The screen opens on **Today**: one column per person with their schedule and chores, checked off with a tap, plus tonight's dinner.
+- It goes back to Today after 1–10 minutes without a touch.
+- Text and touch targets are larger.
+- The screen stays on.
+- A **night clock** shows between the times you choose, for example 9:30 PM to 6:30 AM. Tap it to wake the screen.
+- It reloads at 3:30 AM to pick up app updates.
+
+### Hardware options
+| Option | Screen | Approx. cost | Notes |
+|---|---|---|---|
+| **Raspberry Pi 5 + 15.6" touch monitor** (closest to Skylight) | 15.6" 1080p | ~$200–250 | Pi 5 (4 GB) + official 27 W USB-C power supply + 32 GB microSD + a 15.6" portable touch monitor (one HDMI cable for video, one USB-C cable for touch) + a VESA or picture-frame wall mount. Runs `kiosk/setup-pi.sh`. |
+| **iPad** (any model from the last ~5 years) | 10–13" | ~$350+ | Easiest. Install the Home Screen app, set **Settings → Display → Auto-Lock → Never**, and use **Guided Access** (Settings → Accessibility) to lock the iPad to Kinboard. |
+| **Android tablet** (e.g. Samsung Galaxy Tab A9+) | 11" | ~$200 | Add to Home Screen in Chrome, and use **Screen pinning** to lock it to Kinboard. |
+
+Keep it plugged in. For a tablet, a right-angle cable and a flush wall mount look tidiest.
+
+### Raspberry Pi setup (about 20 minutes)
+1. Use **Raspberry Pi Imager** to flash **Raspberry Pi OS (64-bit, with desktop)**. In the Imager settings, set the Wi-Fi details, a username, and turn on SSH.
+2. Boot the Pi with the touch monitor connected, then open a terminal (or SSH in) and run:
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/D3athstroke25/github-slideshow/main/kinboard/kiosk/setup-pi.sh
+   bash setup-pi.sh ABCD-EFGH-JKMN-PQRS   # your family code from the Family tab
+   sudo reboot
+   ```
+3. Kinboard opens full screen and joins your family automatically. Go to **Family → Wall display** and turn on **Wall display mode** and **Night clock**.
+
+Tip: the **Share code** button sends an invite link (`…#join-CODE`). Opening it on any new screen joins the family without typing.
 
 ## Database
 
