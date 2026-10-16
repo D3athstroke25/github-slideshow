@@ -30,6 +30,8 @@ On each iPhone:
 
 Join from inside the installed app, not in Safari. On iPhone, Home Screen apps keep their own storage, separate from Safari.
 
+**Check the connection:** open **https://d3athstroke25.github.io/github-slideshow/check.html** on a phone and tap **Run check**. It tests saving, syncing between two phones, that wrong family codes are refused, and live updates. It uses a temporary test family that it deletes when done.
+
 Updates go live as soon as you push to `main`. Phones pick them up the next time the app is opened.
 
 ## 2. App Store app (on your Mac mini)
