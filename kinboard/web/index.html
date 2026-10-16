@@ -283,6 +283,35 @@ body.wall .tick{width:32px;height:32px}
 body.wall .trow{padding:10px 12px}
 body.wall .todayhead h2{font-size:28px}
 .sleepscreen.night{background:#000;color:#8a958f}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.streak{font-weight:700}
+.fx-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:72;pointer-events:none}
+.fly-star{position:fixed;z-index:73;pointer-events:none;font-size:30px;line-height:1;color:var(--star);text-shadow:0 2px 6px rgba(0,0,0,.25)}
+.tick.spring{animation:spring .5s cubic-bezier(.3,1.7,.5,1)}
+@keyframes spring{0%{transform:scale(.55)}55%{transform:scale(1.22)}100%{transform:scale(1)}}
+.pop{display:inline-block;animation:pop .45s cubic-bezier(.3,1.7,.5,1)}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.45)}100%{transform:scale(1)}}
+.cel-glow{animation:glow 1.8s ease-out}
+@keyframes glow{0%{box-shadow:0 0 0 0 var(--mi)}15%{box-shadow:0 0 0 6px var(--mi);background:var(--mb)}100%{box-shadow:var(--shadow)}}
+.alldone.cel-in{display:inline-block;animation:alldone .7s cubic-bezier(.3,1.7,.5,1)}
+@keyframes alldone{0%{transform:scale(.3);opacity:0}100%{transform:scale(1);opacity:1}}
+.cel-banner{position:fixed;z-index:74;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);max-width:calc(100% - 32px);padding:12px 22px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:center;pointer-events:none;animation:bannerIn .45s cubic-bezier(.3,1.5,.5,1)}
+.cel-banner b{display:block;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.2}
+.cel-banner span{display:block;font-size:14px;font-weight:600;opacity:.9;margin-top:2px}
+.cel-banner.big{width:min(720px,calc(100% - 32px));padding:18px 24px}
+.cel-banner.big b{font-size:clamp(24px,4vw,40px)}
+.cel-banner.out{opacity:0;transform:translateX(-50%) translateY(-12px);transition:opacity .25s,transform .25s}
+@keyframes bannerIn{0%{transform:translateX(-50%) translateY(-30px) scale(.9);opacity:0}100%{transform:translateX(-50%) translateY(0) scale(1);opacity:1}}
+.cel-flash{position:fixed;inset:0;z-index:71;opacity:.35;pointer-events:none}
+.cel-overlay{position:fixed;inset:0;z-index:70;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:calc(24px + env(safe-area-inset-top,0px)) max(24px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(24px,env(safe-area-inset-left,0px));cursor:pointer;animation:ovIn .4s cubic-bezier(.3,1.4,.5,1)}
+.cel-overlay .who{font-size:clamp(18px,3vw,26px);font-weight:700;opacity:.9}
+.cel-overlay .what{font-family:var(--f-display);font-size:clamp(40px,9vw,96px);line-height:1.05;max-width:16ch;text-wrap:balance;overflow-wrap:anywhere;animation:whatIn .6s .1s cubic-bezier(.3,1.6,.5,1) both}
+.cel-overlay .cost{font-size:clamp(22px,4vw,34px);font-weight:700;text-decoration:line-through;text-decoration-thickness:3px;opacity:.85}
+.cel-overlay .hint{margin-top:18px;font-size:14px;font-weight:600;opacity:.75}
+.cel-overlay.out{opacity:0;transition:opacity .25s}
+@keyframes ovIn{0%{opacity:0;transform:scale(1.04)}100%{opacity:1;transform:none}}
+@keyframes whatIn{0%{transform:scale(.4);opacity:0}100%{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.fx-canvas,.fly-star{display:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -300,6 +329,7 @@ body.wall .todayhead h2{font-size:28px}
 <button class="fab" id="fab" aria-label="Add" data-act="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 <div class="scrim" id="scrim" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 <div class="toast" id="toast" hidden></div>
+<div id="announce" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 <div class="sleepscreen" id="sleep" hidden data-act="wake"></div>
 
 <script>
@@ -435,11 +465,12 @@ const live = (() => {
       send({ topic, event: 'phx_join', payload: { config: { broadcast: { self: false, ack: false }, presence: { key: '' }, private: false } } });
       hb = setInterval(() => send({ topic: 'phoenix', event: 'heartbeat', payload: {} }), 25000);
     };
-    ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.event === 'broadcast') pull(); } catch {} };
+    ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.event !== 'broadcast') return; const p = m.payload || {}; if (p.event === 'celebrate') onRemoteCelebrate(p.payload); else pull(); } catch {} };
     ws.onclose = () => { clearInterval(hb); hb = null; if (mode === 'cloud') setTimeout(connect, retry = Math.min(retry * 2, 30000)); };
   }
   function stop() { clearInterval(hb); hb = null; if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; } }
-  return { connect, stop, ping: () => send({ topic, event: 'broadcast', payload: { type: 'broadcast', event: 'changed', payload: {} } }) };
+  return { connect, stop, ping: () => send({ topic, event: 'broadcast', payload: { type: 'broadcast', event: 'changed', payload: {} } }),
+    send: (event, payload) => send({ topic, event: 'broadcast', payload: { type: 'broadcast', event, payload } }) };
 })();
 
 function startCloud() {
@@ -680,11 +711,12 @@ function vToday() {
     const mine = evs.filter(e => (e.memberIds || []).includes(m.id));
     const ch = all('chores').filter(c => c.memberId === m.id && choreOn(c, d)).sort((a, b) => ['morning', 'afternoon', 'evening', 'any'].indexOf(a.when || 'any') - ['morning', 'afternoon', 'evening', 'any'].indexOf(b.when || 'any'));
     const done = ch.filter(c => isDone(d, c.id)).length;
-    return `<section class="card tcol m c-${m.color}"><div class="mhead">${avatar(m.id)}<div style="flex:1;min-width:0"><h3>${esc(m.name)}</h3><div class="meta tn">${ch.length ? `${done} of ${ch.length} chores` : 'No chores today'} · <span class="stars">★ ${starBalance(m.id).bal}</span></div></div></div>
+    const streak = streakFor(m.id, d);
+    return `<section class="card tcol m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1;min-width:0"><h3>${esc(m.name)}</h3><div class="meta tn">${ch.length ? `${done} of ${ch.length} chores` : 'No chores today'} · <span class="stars" data-stars="${m.id}">★ ${starBalance(m.id).bal}</span>${streak >= 2 ? ` · <span class="streak">🔥 ${streak}</span>` : ''}</div></div></div>
       ${ch.length ? `<div class="bar"><i style="width:${done / ch.length * 100}%"></i></div>` : ''}
       <h4>Schedule</h4>${mine.length ? mine.map(evRow).join('') : '<p class="note">Nothing scheduled</p>'}
       ${ch.length ? `<h4>Chores</h4>${ch.map(choreRow).join('')}` : ''}
-      ${ch.length && done === ch.length ? '<p class="alldone">All done today!</p>' : ''}
+      ${ch.length && done === ch.length ? `<p class="alldone">All done today!${streak >= 2 ? ` ${streak} day streak 🔥` : ''}</p>` : ''}
     </section>`;
   }).join('')}${anyone.length ? `<section class="card tcol m c-slate"><div class="mhead"><span class="av">★</span><div><h3>Anyone</h3><div class="meta">Shared chores</div></div></div>${anyone.map(choreRow).join('')}</section>` : ''}</div>`;
 }
@@ -781,7 +813,7 @@ function vChores() {
   return tb + `<div class="grid-cards">${groups.map(g => {
     const list = all('chores').filter(c => (c.memberId || '') === g.id && choreOn(c, day)).sort((a, b) => ['morning', 'afternoon', 'evening', 'any'].indexOf(a.when || 'any') - ['morning', 'afternoon', 'evening', 'any'].indexOf(b.when || 'any') || a.title.localeCompare(b.title));
     const done = list.filter(c => isDone(day, c.id)).length;
-    return `<section class="card m c-${g.m.color}"><div class="mhead">${g.id ? avatar(g.id) : '<span class="av">★</span>'}<div style="flex:1;min-width:0"><h3>${esc(g.m.name)}</h3><div class="meta tn">${list.length ? `${done} of ${list.length} done` : 'Nothing scheduled'}${g.id ? ` · <span class="stars">★ ${starBalance(g.id).bal}</span>` : ''}</div></div></div>
+    return `<section class="card m c-${g.m.color}" data-person="${g.id}"><div class="mhead">${g.id ? avatar(g.id) : '<span class="av">★</span>'}<div style="flex:1;min-width:0"><h3>${esc(g.m.name)}</h3><div class="meta tn">${list.length ? `${done} of ${list.length} done` : 'Nothing scheduled'}${g.id ? ` · <span class="stars" data-stars="${g.id}">★ ${starBalance(g.id).bal}</span>` : ''}</div></div></div>
       <div class="bar"><i style="width:${list.length ? done / list.length * 100 : 0}%"></i></div>
       ${list.map(c => `<div style="display:flex;align-items:center"><button class="chore ${isDone(day, c.id) ? 'done' : ''}" data-act="chore-toggle" data-id="${c.id}"><span class="tick">${svg('check', 3)}</span><span class="ct">${esc(c.title)}<small>${c.when && c.when !== 'any' ? c.when[0].toUpperCase() + c.when.slice(1) : 'Any time'}</small></span>${Number(c.stars) ? `<span class="stars">★ ${c.stars}</span>` : ''}</button>${canWrite ? `<button class="edit" data-act="chore-edit" data-id="${c.id}" aria-label="Edit ${esc(c.title)}">${svg('pen')}</button>` : ''}</div>`).join('')}
     </section>`;
@@ -794,7 +826,7 @@ function vRewards() {
   const rw = all('rewards').sort((a, b) => a.cost - b.cost);
   const hist = all('redemptions').sort((a, b) => b.at - a.at).slice(0, 12);
   return `<div class="toolbar"><h2>Stars & rewards</h2>${canWrite ? '<button class="btn" data-act="reward-new">Add reward</button>' : ''}</div>
-  <div class="grid-cards">${members().map(m => { const b = starBalance(m.id); return `<section class="card m c-${m.color}"><div class="mhead">${avatar(m.id)}<div style="flex:1"><h3>${esc(m.name)}</h3><div class="meta tn">${b.earned} earned · ${b.spent} spent</div></div><span class="bal tn">★ ${b.bal}</span></div>
+  <div class="grid-cards">${members().map(m => { const b = starBalance(m.id); return `<section class="card m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1"><h3>${esc(m.name)}</h3><div class="meta tn">${b.earned} earned · ${b.spent} spent</div></div><span class="bal tn" data-stars="${m.id}">★ ${b.bal}</span></div>
     ${rw.length ? rw.map(r => `<div class="reward"><span class="ct"><b>${esc(r.title)}</b><small class="stars">★ ${r.cost}</small></span><button class="btn ${b.bal >= r.cost ? 'primary' : ''}" data-act="redeem" data-id="${r.id}" data-m="${m.id}" ${b.bal >= r.cost ? '' : 'disabled style="opacity:.5"'}>${b.bal >= r.cost ? 'Redeem' : `${r.cost - b.bal} to go`}</button></div>`).join('') : '<p class="note">Add rewards like “Pick the movie” or “30 min screen time”.</p>'}
   </section>`; }).join('')}</div>
   ${rw.length && canWrite ? `<h3 class="section-title">Reward list</h3><div class="card">${rw.map(r => `<div class="reward"><span class="ct"><b>${esc(r.title)}</b></span><span class="stars">★ ${r.cost}</span><button class="edit" data-act="reward-edit" data-id="${r.id}" aria-label="Edit">${svg('pen')}</button></div>`).join('')}</div>` : ''}
@@ -848,6 +880,11 @@ function vSettings() {
     : `<p class="note">This board is saved on this device only. Turn on sync to share it with your family; everything here comes along.</p><button class="btn primary" data-act="fam-create">Turn on family sync</button> <button class="btn" data-act="fam-joinscreen">Join an existing family</button>`}
   </section>
   ${Native ? `<section class="card"><h3>Reminders</h3><p class="note">Get a notification 15 minutes before each timed event in the next week.</p>${lsGet('kb-remind', false) ? '<button class="btn" data-act="remind-off">Turn off reminders</button>' : '<button class="btn primary" data-act="remind-on">Turn on reminders</button>'}</section>` : ''}
+  <section class="card"><h3>Celebrations</h3><p class="note">Confetti and cheers when someone finishes a chore or redeems a reward. They also play on every other family screen that's open. These settings apply to this device only.</p>
+    <div class="two"><label class="field"><span>Intensity</span><select id="celLevel" data-cel="level">${[['full', 'Full'], ['subtle', 'Subtle'], ['off', 'Off']].map(([v, l]) => `<option value="${v}" ${celLevel() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+    <label class="check"><input type="checkbox" id="celSound" data-cel="sound" ${lsGet('kb-cel-sound', false) ? 'checked' : ''}> Celebration sounds</label>
+    <p class="note" style="margin-top:-6px">Sounds stay silent during night-clock hours. Celebrations never play while the night clock is showing.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${members().length ? [['chore', 'Chore'], ['allDone', 'All done'], ['milestone', 'Milestone'], ['redeem', 'Reward']].map(([k, l]) => `<button class="btn" data-act="cel-preview" data-id="${k}">Preview: ${l}</button>`).join('') : '<p class="note">Add a person to preview celebrations.</p>'}</div></section>
   <section class="card"><h3>Sample data</h3><p class="note">Explore the app with a pretend family. Sample items are marked and can be removed in one tap.</p>
     ${COLS.some(c => all(c).some(x => x.sample)) ? '<button class="btn danger" data-act="sample-clear" id="sampleClear">Remove sample data</button>' : '<button class="btn" data-act="sample-load">Load sample data</button>'}</section>
   </div>`;
@@ -979,7 +1016,9 @@ function editList(id) {
 function redeem(rid, mid) {
   const r = get('rewards', rid), m = member(mid); if (!r || !m) return;
   openSheet(`<h2>Redeem reward</h2><p>${esc(m.name)} spends <b class="stars">★ ${r.cost}</b> on <b>${esc(r.title)}</b>. Balance after: ★ ${starBalance(mid).bal - r.cost}.</p><div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" type="submit">Redeem</button></div>`, () => {
-    put('redemptions', uid(), { memberId: mid, rewardId: rid, title: r.title, cost: r.cost, at: Date.now() }); closeSheet(); toast(`${m.name} redeemed ${r.title}`);
+    put('redemptions', uid(), { memberId: mid, rewardId: rid, title: r.title, cost: r.cost, at: Date.now() }); closeSheet();
+    emitCelebrations([{ type: 'redeem', personId: mid, title: r.title, cost: r.cost, newBal: starBalance(mid).bal }]);
+    if (celLevel() === 'off') toast(`${m.name} redeemed ${r.title}`);
   });
 }
 
@@ -1098,6 +1137,296 @@ function renderSleep() {
 let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
 
+/* ---------- celebrations ----------
+   One entry point, celebrate(ev). Events are queued and played one at a time, and are also
+   broadcast to the family's other open screens over the same Realtime channel used for sync. */
+const CEL_TYPES = ['chore', 'allDone', 'milestone', 'redeem', 'familyDone'];
+const MILESTONES = [10, 25, 50, 100, 250, 500, 1000];
+const DEVICE = uid();
+const Cel = { q: [], busy: false, seen: new Set(), log: [] };
+window.__kbCel = Cel; // read by the test harness; harmless in production
+const celLevel = () => lsGet('kb-cel-level', 'full'); // full | subtle | off
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+const frames = (n = 2) => new Promise(r => { const f = () => (--n <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+function nightActive() {
+  const sl = document.getElementById('sleep');
+  if (sl && !sl.hidden) return true;
+  return typeof wall !== 'undefined' && wall.on && wall.nightOn && inNight();
+}
+
+/* Colors: person colors are backgrounds; text is black or white, whichever has more contrast (WCAG AA). */
+function toRGB(s) {
+  s = String(s || '').trim();
+  if (s[0] === '#') { const h = s.length === 4 ? s.slice(1).split('').map(c => c + c).join('') : s.slice(1, 7); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
+  const m = s.match(/[\d.]+/g); return m ? m.slice(0, 3).map(Number) : [128, 128, 128];
+}
+const lum = rgb => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]); };
+const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+function textOn(bg) { const rgb = toRGB(bg), dark = [11, 18, 16], light = [255, 255, 255]; return contrast(rgb, dark) >= contrast(rgb, light) ? '#0B1210' : '#FFFFFF'; }
+function personLook(pid, fallbackName) {
+  const m = pid ? member(pid) : null;
+  const probe = document.createElement('span'); probe.className = `m c-${m ? m.color : 'slate'}`; probe.hidden = true; document.body.appendChild(probe);
+  const cs = getComputedStyle(probe), soft = cs.getPropertyValue('--mb').trim(), strong = cs.getPropertyValue('--mi').trim();
+  probe.remove();
+  return { name: m ? m.name : (String(fallbackName || '').slice(0, 40) || 'Family'), soft, strong, text: textOn(strong), confetti: [strong, soft, '#F2C14E', '#FFFFFF'] };
+}
+
+/* Confetti: one shared canvas, capped at 80 particles, torn down when the last particle settles. */
+const FX = (() => {
+  let cv = null, ctx = null, parts = [], raf = 0, last = 0;
+  function ensure() {
+    if (cv) return;
+    cv = document.createElement('canvas'); cv.className = 'fx-canvas'; cv.setAttribute('aria-hidden', 'true');
+    const dpr = Math.min(devicePixelRatio || 1, 1.5);
+    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    document.body.appendChild(cv); ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function burst({ x, y, n = 30, colors, angle = -Math.PI / 2, spread = Math.PI * 1.6, speed = [5, 11] }) {
+    ensure();
+    for (let i = 0; i < n; i++) {
+      const a = angle + (Math.random() - 0.5) * spread, v = speed[0] + Math.random() * (speed[1] - speed[0]);
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.3, w: 6 + Math.random() * 6, h: 4 + Math.random() * 4, c: colors[i % colors.length], t: 0, max: 70 + Math.random() * 45 });
+    }
+    if (parts.length > 80) parts.splice(0, parts.length - 80);
+    if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
+  }
+  function tick(now) {
+    const dt = Math.min(2.5, (now - last) / 16.67); last = now;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    parts = parts.filter(p => p.t < p.max && p.y < innerHeight + 30);
+    for (const p of parts) {
+      p.vx *= Math.pow(0.985, dt); p.vy = p.vy * Math.pow(0.985, dt) + 0.24 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt; p.t += dt;
+      ctx.globalAlpha = Math.max(0, Math.min(1, (p.max - p.t) / (p.max * 0.3)));
+      ctx.fillStyle = p.c; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.r * 1.7)) + 1); ctx.restore();
+    }
+    if (parts.length) raf = requestAnimationFrame(tick);
+    else { raf = 0; cv.remove(); cv = null; ctx = null; }
+  }
+  function clear() { parts = []; if (raf) cancelAnimationFrame(raf); raf = 0; if (cv) { cv.remove(); cv = null; } }
+  return { burst, clear, active: () => !!cv };
+})();
+
+/* Sound: short WebAudio chimes, no files. Off by default; never during night-clock hours. */
+let actx = null;
+addEventListener('pointerdown', () => { if (actx && actx.state === 'suspended') actx.resume().catch(() => {}); }, { passive: true });
+function chime(kind) {
+  if (!lsGet('kb-cel-sound', false) || (typeof wall !== 'undefined' && wall.on && wall.nightOn && inNight())) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    actx = actx || new AC(); if (actx.state === 'suspended') actx.resume().catch(() => {});
+    const notes = { chore: [1046.5, 1568], allDone: [784, 988, 1175, 1568], milestone: [659, 784, 988, 1319], redeem: [523, 659, 784, 1047, 1319], familyDone: [523, 784, 1047, 1319, 1568] }[kind] || [1046.5];
+    notes.forEach((f, i) => {
+      const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + i * 0.09;
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.45);
+    });
+  } catch {}
+}
+
+function celText(ev, who) {
+  switch (ev.type) {
+    case 'chore': return `${who} finished ${ev.title || 'a chore'}${ev.stars ? `, plus ${ev.stars} star${ev.stars > 1 ? 's' : ''}` : ''}.`;
+    case 'allDone': return `${who} finished every chore today!${ev.streak >= 2 ? ` ${ev.streak} day streak 🔥` : ''}`;
+    case 'milestone': return `${who} hit ${ev.milestone} stars!`;
+    case 'redeem': return `${who} redeemed ${ev.title} for ${ev.cost} stars.`;
+    case 'familyDone': return 'Everyone finished today’s chores!';
+  }
+  return '';
+}
+function announce(text) { const a = document.getElementById('announce'); if (!a) return; a.textContent = ''; setTimeout(() => { a.textContent = text; }, 30); }
+
+const visible = el => { if (!el) return null; const r = el.getBoundingClientRect(); return r.width && r.bottom > 0 && r.top < innerHeight ? r : null; };
+const centerOf = r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+function originFor(ev) {
+  const sel = ev.choreId ? document.querySelector(`[data-act="chore-toggle"][data-id="${CSS.escape(ev.choreId)}"] .tick`) : null;
+  const r = visible(sel) || visible(ev.personId ? document.querySelector(`[data-person="${CSS.escape(ev.personId)}"]`) : null);
+  return { el: sel, pt: r ? centerOf(r) : { x: innerWidth / 2, y: innerHeight * 0.35 } };
+}
+function starTarget(pid) {
+  if (!pid) return null;
+  return [...document.querySelectorAll(`[data-stars="${CSS.escape(pid)}"]`)].find(visible) || null;
+}
+function countUp(el, from, to) {
+  if (!el) return;
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  const t0 = performance.now(), dur = 500;
+  const step = now => { const k = Math.min(1, (now - t0) / dur); el.textContent = `★ ${Math.round(from + (to - from) * k)}`; if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function flyStar(from, toEl, look) {
+  return new Promise(res => {
+    const s = document.createElement('span'); s.className = 'fly-star'; s.textContent = '★'; s.setAttribute('aria-hidden', 'true');
+    s.style.left = `${from.x}px`; s.style.top = `${from.y}px`; document.body.appendChild(s);
+    const r = visible(toEl), to = r ? centerOf(r) : { x: from.x, y: from.y - 120 };
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const a = s.animate([
+      { transform: 'translate(-50%,-50%) scale(.6)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${dx * 0.45}px), calc(-50% + ${dy * 0.45 - 70}px)) scale(1.5)`, opacity: 1, offset: 0.45 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(.7)`, opacity: r ? 1 : 0 },
+    ], { duration: 650, easing: 'cubic-bezier(.45,0,.3,1)' });
+    a.onfinish = () => { s.remove(); res(); };
+  });
+}
+function banner(look, text, sub, ms) {
+  const b = document.createElement('div'); b.className = 'cel-banner'; b.setAttribute('aria-hidden', 'true');
+  b.style.background = look.strong; b.style.color = look.text;
+  const t = document.createElement('b'); t.textContent = text; b.appendChild(t);
+  if (sub) { const s = document.createElement('span'); s.textContent = sub; b.appendChild(s); }
+  document.body.appendChild(b);
+  setTimeout(() => { b.classList.add('out'); setTimeout(() => b.remove(), 300); }, ms);
+  return b;
+}
+function flash(look, text, ms = 1200) { // reduced-motion treatment: a still colour wash plus the words
+  const f = document.createElement('div'); f.className = 'cel-flash'; f.style.background = look.strong; f.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(f); setTimeout(() => f.remove(), 600);
+  const b = banner(look, text, '', ms); b.classList.add('still');
+}
+
+const PLAY = {
+  async chore(ev, look, subtle) {
+    await frames(2); // let the re-render that marked the chore done land first
+    const o = originFor(ev);
+    if (o.el) { o.el.classList.remove('spring'); void o.el.offsetWidth; o.el.classList.add('spring'); }
+    if (ev.local && navigator.vibrate) try { navigator.vibrate(30); } catch {}
+    chime('chore');
+    if (reducedMotion()) { flash(look, celText(ev, look.name)); await sleepMs(1200); return; }
+    FX.burst({ x: o.pt.x, y: o.pt.y, n: subtle ? 14 : 32, colors: look.confetti, speed: subtle ? [3, 7] : [4, 10] });
+    const target = starTarget(ev.personId);
+    if (ev.stars && ev.personId) { await flyStar(o.pt, target, look); countUp(target, (ev.newBal ?? ev.stars) - ev.stars, ev.newBal ?? ev.stars); }
+    else if (!visible(o.el)) banner(look, celText(ev, look.name), '', 1000);
+    await sleepMs(550);
+  },
+  async allDone(ev, look, subtle) {
+    await frames(2);
+    chime('allDone');
+    const sub = ev.streak >= 2 ? `${ev.streak} day streak 🔥` : '';
+    if (reducedMotion()) { flash(look, `${look.name} is all done today!`, 2000); await sleepMs(2000); return; }
+    const col = document.querySelector(`[data-person="${CSS.escape(ev.personId)}"]`), r = visible(col);
+    if (col) { col.classList.remove('cel-glow'); void col.offsetWidth; col.classList.add('cel-glow'); setTimeout(() => col.classList.remove('cel-glow'), 2000); const ad = col.querySelector('.alldone'); if (ad) { ad.classList.remove('cel-in'); void ad.offsetWidth; ad.classList.add('cel-in'); } }
+    const p = r ? { x: r.left + r.width / 2, y: r.top + 40 } : { x: innerWidth / 2, y: innerHeight * 0.3 };
+    FX.burst({ x: p.x, y: p.y, n: subtle ? 24 : 60, colors: look.confetti, speed: [6, 13] });
+    banner(look, `${look.name} is all done today!`, sub, 1900);
+    await sleepMs(2000);
+  },
+  async milestone(ev, look, subtle) {
+    chime('milestone');
+    if (reducedMotion()) { flash(look, celText(ev, look.name), 2500); await sleepMs(2500); return; }
+    banner(look, celText(ev, look.name), 'Star milestone', 2400).classList.add('big');
+    const y = 70 + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0);
+    FX.burst({ x: innerWidth * 0.2, y, n: subtle ? 12 : 36, colors: look.confetti, angle: -Math.PI / 4, spread: Math.PI / 2, speed: [6, 12] });
+    FX.burst({ x: innerWidth * 0.8, y, n: subtle ? 12 : 36, colors: look.confetti, angle: -3 * Math.PI / 4, spread: Math.PI / 2, speed: [6, 12] });
+    await sleepMs(2500);
+  },
+  async familyDone(ev, look, subtle) {
+    const fam = { ...look, name: familyName() };
+    chime('familyDone');
+    if (reducedMotion()) { flash(fam, celText(ev), 2500); await sleepMs(2500); return; }
+    banner(fam, celText(ev), familyName(), 2400).classList.add('big');
+    FX.burst({ x: innerWidth / 2, y: innerHeight * 0.45, n: subtle ? 30 : 80, colors: ['#F8D5E0', '#D7EBA3', '#CDE7EF', '#DFD5F6', '#FADEC6', '#F2C14E'], spread: Math.PI * 2, speed: [6, 14] });
+    await sleepMs(2500);
+  },
+  async redeem(ev, look, subtle) {
+    chime('redeem');
+    if (subtle && !reducedMotion()) { banner(look, celText(ev, look.name), '', 2400).classList.add('big'); FX.burst({ x: innerWidth / 2, y: 90, n: 24, colors: look.confetti, speed: [4, 9] }); await sleepMs(2500); return; }
+    const ov = document.createElement('div'); ov.className = 'cel-overlay'; ov.setAttribute('role', 'button'); ov.tabIndex = 0;
+    ov.style.background = look.strong; ov.style.color = look.text;
+    const parts = [['who', look.name + ' redeemed'], ['what', ev.title || 'a reward'], ['cost', `★ ${ev.cost}`], ['hint', 'Tap to close']];
+    for (const [cls, txt] of parts) { const d = document.createElement('div'); d.className = cls; d.textContent = txt; ov.appendChild(d); }
+    if (reducedMotion()) ov.classList.add('still');
+    document.body.appendChild(ov);
+    if (!reducedMotion()) {
+      FX.burst({ x: 0, y: 0, n: 40, colors: look.confetti.concat(['#F2C14E']), angle: Math.PI / 4, spread: Math.PI / 2.2, speed: [8, 16] });
+      FX.burst({ x: innerWidth, y: 0, n: 40, colors: look.confetti.concat(['#F2C14E']), angle: 3 * Math.PI / 4, spread: Math.PI / 2.2, speed: [8, 16] });
+    }
+    await new Promise(res => {
+      let done = false;
+      const close = () => { if (done) return; done = true; ov.classList.add('out'); setTimeout(() => { ov.remove(); res(); }, 250); };
+      ov.addEventListener('click', e => { e.stopPropagation(); close(); });
+      ov.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') close(); });
+      setTimeout(close, 3000);
+      Cel.closeCurrent = close;
+    });
+    Cel.closeCurrent = null;
+  },
+};
+
+function celebrate(ev) {
+  if (!ev || !CEL_TYPES.includes(ev.type) || !ev.id || Cel.seen.has(ev.id)) return;
+  Cel.seen.add(ev.id); if (Cel.seen.size > 500) Cel.seen = new Set([...Cel.seen].slice(-200));
+  const look = personLook(ev.personId, ev.name);
+  announce(celText(ev, look.name));
+  if (celLevel() === 'off' || nightActive()) { Cel.log.push({ type: ev.type, skipped: celLevel() === 'off' ? 'off' : 'night' }); return; }
+  Cel.q.push(ev); if (Cel.q.length > 8) Cel.q.splice(0, Cel.q.length - 8);
+  if (!Cel.busy) runNext();
+}
+async function runNext() {
+  const ev = Cel.q.shift();
+  if (!ev) { Cel.busy = false; return; }
+  Cel.busy = true;
+  if (nightActive()) { celStop(); Cel.busy = false; return; } // the night clock came on: drop the rest
+  const entry = { type: ev.type, id: ev.id, start: performance.now() };
+  try { await PLAY[ev.type](ev, personLook(ev.personId, ev.name), celLevel() === 'subtle'); } catch (e) { entry.error = String(e); }
+  entry.end = performance.now(); Cel.log.push(entry);
+  runNext();
+}
+function celStop() { // night clock or "Off": end everything on screen now
+  Cel.q.length = 0; FX.clear();
+  document.querySelectorAll('.cel-banner,.cel-flash,.fly-star').forEach(n => n.remove());
+  if (Cel.closeCurrent) Cel.closeCurrent();
+}
+function emitCelebrations(list) {
+  for (const e of list) {
+    const ev = { ...e, id: uid(), from: DEVICE, name: e.personId ? (member(e.personId) || {}).name : '' };
+    celebrate({ ...ev, local: true });
+    if (mode === 'cloud') live.send('celebrate', ev);
+  }
+}
+function onRemoteCelebrate(p) {
+  if (!p || typeof p !== 'object' || p.from === DEVICE) return;
+  const ev = { id: String(p.id || '').slice(0, 40), type: String(p.type || ''), personId: String(p.personId || '').slice(0, 200), name: String(p.name || '').slice(0, 40),
+    choreId: String(p.choreId || '').slice(0, 200), title: String(p.title || '').slice(0, 120), stars: Math.max(0, Math.min(1000, Number(p.stars) || 0)),
+    newBal: Number.isFinite(Number(p.newBal)) ? Number(p.newBal) : undefined, streak: Math.max(0, Math.min(3650, Number(p.streak) || 0)),
+    milestone: Number(p.milestone) || 0, cost: Math.max(0, Number(p.cost) || 0) };
+  celebrate(ev);
+}
+
+function streakFor(mid, day) {
+  let n = 0, d = day;
+  for (let i = 0; i < 120; i++, d = addDays(d, -1)) {
+    const list = all('chores').filter(c => c.memberId === mid && choreOn(c, d));
+    if (!list.length) continue;
+    if (list.every(c => isDone(d, c.id))) n++;
+    else if (i === 0) continue; // today still in progress doesn't break the streak
+    else break;
+  }
+  return n;
+}
+function familyAllDone(day) {
+  const groups = members().map(m => m.id).concat(['']).map(id => all('chores').filter(c => (c.memberId || '') === id && choreOn(c, day))).filter(l => l.length);
+  return groups.length > 1 && groups.every(l => l.every(c => isDone(day, c.id)));
+}
+function celebrateChore(c, day, earnedBefore) {
+  const mid = c.memberId || '', stars = Number(c.stars) || 0, evs = [];
+  evs.push({ type: 'chore', personId: mid, choreId: c.id, title: c.title, stars: mid ? stars : 0, newBal: mid ? starBalance(mid).bal : 0 });
+  if (mid) {
+    const s = choreStats(mid, day);
+    if (s.total && s.done === s.total) evs.push({ type: 'allDone', personId: mid, streak: day === today() ? streakFor(mid, day) : 0 });
+    const hit = MILESTONES.filter(t => earnedBefore < t && earnedBefore + stars >= t).pop();
+    if (hit) evs.push({ type: 'milestone', personId: mid, milestone: hit });
+  }
+  if (day === today() && familyAllDone(day)) evs.push({ type: 'familyDone', personId: '' });
+  emitCelebrations(evs);
+}
+function previewCelebration(type) {
+  const m = members()[0];
+  const base = { personId: m ? m.id : '', id: uid(), local: true };
+  const ev = { chore: { type: 'chore', title: 'Make bed', stars: 1, newBal: m ? starBalance(m.id).bal : 1 }, allDone: { type: 'allDone', streak: 3 }, milestone: { type: 'milestone', milestone: 50 }, redeem: { type: 'redeem', title: 'Pick Friday’s movie', cost: 10 } }[type];
+  if (ev) celebrate({ ...base, ...ev });
+}
+
 /* ---------- events ---------- */
 document.addEventListener('click', async ev => {
   if (ev.target === $('#scrim')) return closeSheet();
@@ -1126,8 +1455,12 @@ document.addEventListener('click', async ev => {
     case 'chore-edit': editChore(id); break;
     case 'chore-toggle': {
       const day = el.dataset.day || ui.choreDay, c = get('chores', id), k = doneKey(day, id);
-      if (S.completions.has(k)) del('completions', k);
-      else { put('completions', k, { choreId: id, date: day, memberId: c.memberId || '', stars: Number(c.stars) || 0, at: Date.now() }); if (Number(c.stars) && c.memberId) toast(`+${c.stars} ★ for ${(member(c.memberId) || {}).name}`); }
+      if (!c) break;
+      if (S.completions.has(k)) { del('completions', k); break; }
+      const earnedBefore = c.memberId ? starBalance(c.memberId).earned : 0;
+      put('completions', k, { choreId: id, date: day, memberId: c.memberId || '', stars: Number(c.stars) || 0, at: Date.now() });
+      celebrateChore(c, day, earnedBefore);
+      if (celLevel() === 'off' && Number(c.stars) && c.memberId) toast(`+${c.stars} ★ for ${(member(c.memberId) || {}).name}`);
       break; }
     case 'chore-prev': ui.choreDay = addDays(ui.choreDay, -1); render(); break;
     case 'chore-next': ui.choreDay = addDays(ui.choreDay, 1); render(); break;
@@ -1149,9 +1482,10 @@ document.addEventListener('click', async ev => {
     case 'ics': importICS(); break;
     case 'sample-load': loadSample(); break;
     case 'sample-clear': if (el.classList.contains('armed')) clearSample(); else { el.classList.add('armed'); el.textContent = 'Tap again to remove'; } break;
-    case 'sleep': renderSleep(); $('#sleep').hidden = false; break;
+    case 'sleep': renderSleep(); $('#sleep').hidden = false; celStop(); break;
     case 'wake': $('#sleep').hidden = true; $('#sleep').classList.remove('night'); break;
     case 'fullscreen': try { await (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()); } catch { toast('Full screen is not available here. On iPad, add Kinboard to the Home Screen instead.'); } break;
+    case 'cel-preview': previewCelebration(id); break;
     case 'fam-create': createFamily(el); break;
     case 'fam-local': lsSet('kb-localonly', true); mode = 'local'; loadLocal(); render(); break;
     case 'fam-joinscreen': mode = 'setup'; render(); break;
@@ -1207,7 +1541,7 @@ function wallTick() {
     closeSheet(); ui.tab = 'today'; ui.cursor = today(); ui.choreDay = today(); ui.mealWeek = mondayOf(today()); ui.filter.clear(); $('#main').scrollTop = 0; render();
   } else if (ui.tab === 'today' && $('#scrim').hidden && n.getMinutes() !== lastMin) { lastMin = n.getMinutes(); render(); }
   if (wall.on && wall.nightOn) {
-    if (inNight() && idle > 60000 && sl.hidden) { renderSleep(); sl.classList.add('night'); sl.hidden = false; }
+    if (inNight() && idle > 60000 && sl.hidden) { renderSleep(); sl.classList.add('night'); sl.hidden = false; celStop(); }
     else if (!inNight() && sl.classList.contains('night') && !sl.hidden) { sl.hidden = true; sl.classList.remove('night'); }
   }
   if (wall.on && !Native && n.getHours() === 3 && n.getMinutes() >= 30 && n.getMinutes() < 40 && Date.now() - loadedAt > 3600000 && navigator.onLine) location.reload();
@@ -1215,6 +1549,9 @@ function wallTick() {
 setInterval(wallTick, 15000);
 document.addEventListener('visibilitychange', keepAwake);
 document.addEventListener('change', e => {
+  const ck = e.target.dataset && e.target.dataset.cel;
+  if (ck === 'level') { lsSet('kb-cel-level', e.target.value); if (e.target.value === 'off') celStop(); }
+  if (ck === 'sound') { lsSet('kb-cel-sound', e.target.checked); if (e.target.checked) chime('chore'); }
   const k = e.target.dataset && e.target.dataset.wall; if (!k) return;
   const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
   if (k === 'on') { wall.on = v; lsSet('kb-wall', v); applyWall(); toast(v ? 'Wall display mode on' : 'Wall display mode off'); }
