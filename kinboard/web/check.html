@@ -27,7 +27,7 @@ li small{color:var(--muted);overflow-wrap:anywhere}
 <body>
 <main>
   <h1>Kinboard connection check</h1>
-  <p>Tests this device against the real Kinboard server: saving, syncing between two phones, refusing wrong family codes, and live updates. It creates a temporary test family and deletes it at the end. Your own family's data is not touched.</p>
+  <p>Tests this device against the real Kinboard server: saving, syncing between two phones, refusing wrong family codes, and live updates. It creates a temporary test family, tests photo storage and the calendar subscription service, and deletes everything at the end. Your own family's data is not touched.</p>
   <button id="go">Run check</button>
   <ol id="list"></ol>
   <p id="summary" role="status"></p>
@@ -111,6 +111,21 @@ async function run() {
       await got;
       return `delivered in ${Math.round(performance.now() - t)} ms`;
     } finally { a.close(); b.close(); }
+  });
+  await step('Photo storage', async () => {
+    const b64 = btoa('kinboard-photo-check');
+    await rpc('kb_photo_put', { code, photo_id: 'check-p1', mime: 'image/jpeg', b64 });
+    const r = await rpc('kb_photo_get', { code, photo_id: 'check-p1' });
+    if (!r.data.length || r.data[0].b64.replace(/\s/g, '') !== b64) throw new Error('photo did not round-trip');
+    await rpc('kb_photo_del', { code, photo_id: 'check-p1' });
+    return `stored and read back in ${r.ms} ms`;
+  });
+  await step('Calendar subscription service', async () => {
+    const t = performance.now();
+    const r = await fetch(`${CFG.url}/functions/v1/kb-ics`, { method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ code, url: 'http://not-allowed.example' }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 400 && j.error === 'bad_url') return `answered in ${Math.round(performance.now() - t)} ms, unsafe links refused`;
+    throw new Error(`unexpected answer: HTTP ${r.status} ${j.error || ''}`);
   });
   await step('Delete the test family', async () => { await rpc('kb_delete_family', { code }); const r = await rpc('kb_check', { code }).catch(e => e); if (r && r.data) throw new Error('family still exists'); return 'deleted'; });
   finish(fails);

@@ -6,6 +6,7 @@ A family calendar, chore chart, rewards, lists and meal planner, inspired by wal
 |---|---|
 | `web/` | The app itself: a single-page app that works offline and can be added to the Home Screen. It is deployed to GitHub Pages. |
 | `native/` | A Capacitor project that wraps `web/` as a real iOS app for TestFlight and the App Store. |
+| `supabase/` | Database migrations and the `kb-ics` Edge Function, mirroring what is deployed. |
 | `kiosk/` | Setup script that turns a Raspberry Pi and touchscreen into a wall display. |
 | `artifact/` | The original claude.ai prototype. |
 
@@ -104,6 +105,32 @@ Keep it plugged in. For a tablet, a right-angle cable and a flush wall mount loo
 3. Kinboard opens full screen and joins your family automatically. Go to **Family → Wall display** and turn on **Wall display mode** and **Night clock**.
 
 Tip: the **Share code** button sends an invite link (`…#join-CODE`). Opening it on any new screen joins the family without typing.
+
+## Parent PIN
+
+Go to **Family → Parent PIN** and set 4–8 digits. After that:
+- **Kids can still:** check off chores, add and edit events, redeem rewards, and use lists and meals.
+- **Parents' PIN is needed to:** open Family settings, add or edit chores, rewards and people, adjust stars, rename or delete lists, and delete events.
+
+Once entered, the PIN stays unlocked for 5 minutes. A wall display locks again as soon as it goes back to Today. On a parent's own phone, tick **Keep this device unlocked**.
+
+This is a speed bump for kids, not strong security. Anyone with the family code could still change data with technical know-how.
+
+## Calendars
+
+- **Subscribe** (Family → Calendars). Paste a calendar's secret iCal link:
+  - Google: Settings → the calendar → Integrate calendar → "Secret address in iCal format".
+  - Apple: share the calendar as a Public Calendar.
+  - Outlook: publish the calendar as ICS.
+
+  Kinboard checks for changes every 30 minutes. The `kb-ics` Edge Function does the download, and only for callers holding a valid family code. Subscribed events are read-only in Kinboard. Repeating events are supported: weekly on several days, every N weeks, the Nth weekday of a month, limited by a count or end date, skipped dates, and individually moved occurrences.
+- **Import** a one-time .ics file.
+- **Editing a repeating event** asks whether to change **This event**, **This and following**, or **All events**. Deleting asks the same.
+
+## Weather and photos
+
+- **Weather** (Family → Weather): pick your town. The header shows the current temperature, and Today shows the high, low and chance of rain. Forecasts come from Open-Meteo, which needs no account.
+- **Photos** (Family → Photos): add family photos. They're resized to under 600 KB each, with up to 300 per family. Under **Wall display**, set **Photo screensaver after N min**. The wall then shows a slideshow with the clock, weather and next event. A tap, a celebration, or the night clock ends it.
 
 ## Celebrations
 

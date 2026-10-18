@@ -311,6 +311,26 @@ body.wall .todayhead h2{font-size:28px}
 .cel-overlay.out{opacity:0;transition:opacity .25s}
 @keyframes ovIn{0%{opacity:0;transform:scale(1.04)}100%{opacity:1;transform:none}}
 @keyframes whatIn{0%{transform:scale(.4);opacity:0}100%{transform:none;opacity:1}}
+.wx{font-weight:600;color:var(--muted)}
+.wxday{font-weight:600;font-size:14px;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
+.pindots{display:flex;gap:12px;justify-content:center;margin:6px 0 14px;min-height:16px}
+.pindots i{width:14px;height:14px;border-radius:50%;border:2px solid var(--accent)}
+.pindots i.on{background:var(--accent)}
+.pinpad{display:grid;grid-template-columns:repeat(3,72px);gap:12px;justify-content:center;margin-bottom:14px}
+.pinpad button{height:72px;border-radius:50%;background:var(--surface-2);border:1px solid var(--line);font-size:26px;font-weight:600}
+.pinpad button.ok{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.pinpad.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:10px}
+.thumbs figure{margin:0;position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--surface-2);max-width:100%}
+.thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.thumbs .edit{position:absolute;top:4px;right:4px;background:var(--surface);border-radius:8px;font-size:12px;padding:4px 6px}
+.saver{position:fixed;inset:0;z-index:78;background:#000;cursor:pointer}
+.saver img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 1.5s}
+.saver img.show{opacity:1}
+.saver-info{position:absolute;left:max(28px,env(safe-area-inset-left,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7)}
+.saver-info .big{font-family:var(--f-display);font-size:clamp(40px,7vw,84px);line-height:1}
+.saver-info div:last-child{font-size:clamp(15px,2vw,22px);font-weight:600;margin-top:6px}
 @media (prefers-reduced-motion:reduce){.fx-canvas,.fly-star{display:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -331,6 +351,7 @@ body.wall .todayhead h2{font-size:28px}
 <div class="toast" id="toast" hidden></div>
 <div id="announce" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 <div class="sleepscreen" id="sleep" hidden data-act="wake"></div>
+<div class="saver" id="saver" hidden data-act="saver"></div>
 
 <script>
 (() => {
@@ -373,7 +394,7 @@ const I = {
 const svg = (k, sw = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[k]}</svg>`;
 
 /* ---------- store: local cache + Supabase family sync (offline-first) ---------- */
-const COLS = ['members','events','chores','completions','lists','items','meals','rewards','redemptions','settings'];
+const COLS = ['members','events','chores','completions','lists','items','meals','rewards','redemptions','settings','feeds','photos'];
 const S = {}; COLS.forEach(c => S[c] = new Map());
 const CFG = window.KB_CONFIG || {};
 let mode = 'loading', canWrite = true, syncState = 'ok';
@@ -475,7 +496,7 @@ const live = (() => {
 
 function startCloud() {
   mode = 'cloud'; loadLocal(); render();
-  live.connect(); pull(); schedulePush(0);
+  live.connect(); pull().then(() => setTimeout(() => syncFeeds(false), 1500)); schedulePush(0);
 }
 function initStore() {
   if (famCode) return startCloud();
@@ -581,14 +602,26 @@ const familyName = () => (get('settings', 'family') || {}).name || 'Our Family';
 
 function occursOn(e, day) {
   if (day < e.date) return false;
+  if (e.exdates && e.exdates.includes(day)) return false;
   const rep = e.repeat || 'none';
   if (rep === 'none') return day <= (e.endDate && e.allDay ? e.endDate : e.date);
   if (e.until && day > e.until) return false;
-  const a = pd(e.date), b = pd(day);
-  if (rep === 'daily') return true;
-  if (rep === 'weekly') return a.getDay() === b.getDay();
-  if (rep === 'monthly') return a.getDate() === b.getDate();
-  if (rep === 'yearly') return a.getDate() === b.getDate() && a.getMonth() === b.getMonth();
+  const a = pd(e.date), b = pd(day), iv = Math.max(1, e.interval || 1), days = Math.round((b - a) / 864e5);
+  if (rep === 'daily') return days % iv === 0;
+  if (rep === 'weekly') {
+    if (Math.floor((days + a.getDay()) / 7) % iv) return false;
+    return e.byDays && e.byDays.length ? e.byDays.includes(b.getDay()) : a.getDay() === b.getDay();
+  }
+  if (rep === 'monthly') {
+    if (((b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth()) % iv) return false;
+    if (e.nth) {
+      if (b.getDay() !== e.nth.dow) return false;
+      if (e.nth.n > 0) return Math.ceil(b.getDate() / 7) === e.nth.n;
+      return b.getDate() + 7 > new Date(b.getFullYear(), b.getMonth() + 1, 0).getDate();
+    }
+    return a.getDate() === b.getDate();
+  }
+  if (rep === 'yearly') return (b.getFullYear() - a.getFullYear()) % iv === 0 && a.getDate() === b.getDate() && a.getMonth() === b.getMonth();
   return false;
 }
 const evSort = (a, b) => (a.allDay === b.allDay ? 0 : a.allDay ? -1 : 1) || (a.start || '').localeCompare(b.start || '');
@@ -615,10 +648,10 @@ function choreStats(mid, day) {
   return { total: list.length, done: list.filter(c => isDone(day, c.id)).length };
 }
 function starBalance(mid) {
-  let earned = 0, spent = 0;
+  let earned = 0, spent = 0, adj = 0;
   S.completions.forEach(c => { if (c.memberId === mid) earned += Number(c.stars) || 0; });
-  S.redemptions.forEach(r => { if (r.memberId === mid) spent += Number(r.cost) || 0; });
-  return { earned, spent, bal: earned - spent };
+  S.redemptions.forEach(r => { if (r.memberId !== mid) return; if (r.adjust) adj -= Number(r.cost) || 0; else spent += Number(r.cost) || 0; });
+  return { earned, spent, adj, bal: earned - spent + adj };
 }
 
 /* ---------- ui state ---------- */
@@ -645,7 +678,7 @@ function renderTop() {
     <div class="hrow">
       <h1 class="family">${esc(familyName())}</h1>
       <span class="clock tn" id="clock">${fmtT(fromMin(now.getHours() * 60 + now.getMinutes()))}</span>
-      <span class="hdate">${DOWL[now.getDay()]}, ${MON[now.getMonth()]} ${now.getDate()}</span>
+      <span class="hdate">${DOWL[now.getDay()]}, ${MON[now.getMonth()]} ${now.getDate()}</span>${wxBadge()}
       <span class="sync ${mode === 'local' || syncState !== 'ok' ? 'local' : ''}" title="${mode === 'cloud' ? 'Changes sync to everyone in your family' : 'Saved on this device only'}"><i></i>${mode === 'cloud' ? ({ ok: 'Synced', pending: 'Saving…', offline: 'Offline · will sync' })[syncState] : mode === 'local' ? 'This device only' : ''}</span>
     </div>
     <div class="chips ${ui.filter.size ? 'filtering' : ''}" role="group" aria-label="Show events for">
@@ -654,6 +687,7 @@ function renderTop() {
     </div>`;
 }
 function tickClock() {
+  refreshWeather(false);
   const el = $('#clock'); if (!el) return;
   const n = new Date(); el.textContent = fmtT(fromMin(n.getHours() * 60 + n.getMinutes()));
   if (!$('#sleep').hidden) renderSleep();
@@ -675,6 +709,7 @@ function render() {
   if (actId) { const i = document.getElementById(actId); if (i) i.focus(); }
   $('#fab').hidden = !canWrite || ui.tab === 'settings' || !members().length && ui.tab !== 'lists';
   if (ui.tab === 'calendar') placeNowLine();
+  if (ui.tab === 'settings') fillThumbs();
   scheduleReminders();
 }
 
@@ -701,12 +736,12 @@ function vToday() {
     const s = e.allDay ? -1 : toMin(e.start), en = e.allDay ? 1440 : toMin(e.end || e.start);
     const st = e.allDay ? '' : en <= nowM ? 'past' : s <= nowM ? 'now' : '';
     const c = evStyle(e);
-    return `<button class="trow ${c.cls} ${st}" style="${c.style}" data-act="ev" data-id="${e.id}"><span class="t tn">${e.allDay ? 'All day' : fmtT(e.start)}</span><b>${esc(e.title)}</b>${st === 'now' ? '<span class="nowtag">Now</span>' : ''}</button>`;
+    return `<button class="trow ${c.cls} ${st}" style="${c.style}" data-act="ev" data-id="${e.id}" data-day="${d}"><span class="t tn">${e.allDay ? 'All day' : fmtT(e.start)}</span><b>${esc(e.title)}</b>${st === 'now' ? '<span class="nowtag">Now</span>' : ''}</button>`;
   };
   const choreRow = c => `<button class="chore ${isDone(d, c.id) ? 'done' : ''}" data-act="chore-toggle" data-id="${c.id}" data-day="${d}"><span class="tick">${svg('check', 3)}</span><span class="ct">${esc(c.title)}</span>${Number(c.stars) ? `<span class="stars">★ ${c.stars}</span>` : ''}</button>`;
   const anyone = all('chores').filter(c => !c.memberId && choreOn(c, d));
   return `<div class="todayhead"><h2>${DOWL[n.getDay()]}, ${MON[n.getMonth()]} ${n.getDate()}</h2>
-    <div class="strip">${fam.map(evRow).join('')}${dinner ? `<button class="trow dinner" data-act="tab" data-id="meals"><span class="t">Dinner</span><b>${esc(dinner.text)}</b></button>` : ''}${anyone.length ? `<span class="note">${anyone.filter(c => isDone(d, c.id)).length}/${anyone.length} family chores done</span>` : ''}</div></div>
+    <div class="strip">${wxToday()}${fam.map(evRow).join('')}${dinner ? `<button class="trow dinner" data-act="tab" data-id="meals"><span class="t">Dinner</span><b>${esc(dinner.text)}</b></button>` : ''}${anyone.length ? `<span class="note">${anyone.filter(c => isDone(d, c.id)).length}/${anyone.length} family chores done</span>` : ''}</div></div>
   <div class="today-grid">${ms.map(m => {
     const mine = evs.filter(e => (e.memberIds || []).includes(m.id));
     const ch = all('chores').filter(c => c.memberId === m.id && choreOn(c, d)).sort((a, b) => ['morning', 'afternoon', 'evening', 'any'].indexOf(a.when || 'any') - ['morning', 'afternoon', 'evening', 'any'].indexOf(b.when || 'any'));
@@ -746,7 +781,7 @@ function vCalendar() {
 function vGrid(start, n) {
   const days = Array.from({ length: n }, (_, i) => addDays(start, i)), td = today();
   const head = `<div class="tg-row tg-head" style="--cols:${n}"><div></div>${days.map(x => { const dd = pd(x); return `<div class="dh ${x === td ? 'today' : ''}"><small>${DOW[dd.getDay()]}</small>${dd.getDate()}</div>`; }).join('')}</div>`;
-  const allday = `<div class="tg-row tg-all" style="--cols:${n}"><div class="lab">all-day</div>${days.map(x => `<div>${eventsOn(x).filter(e => e.allDay).map(e => { const s = evStyle(e); return `<button class="pill ${s.cls}" style="${s.style}" data-act="ev" data-id="${e.id}">${esc(e.title)}</button>`; }).join('')}</div>`).join('')}</div>`;
+  const allday = `<div class="tg-row tg-all" style="--cols:${n}"><div class="lab">all-day</div>${days.map(x => `<div>${eventsOn(x).filter(e => e.allDay).map(e => { const s = evStyle(e); return `<button class="pill ${s.cls}" style="${s.style}" data-act="ev" data-id="${e.id}" data-day="${x}">${esc(e.title)}</button>`; }).join('')}</div>`).join('')}</div>`;
   const hh = H1 - H0;
   const hours = `<div class="hours" style="height:calc(var(--hour) * ${hh})">${Array.from({ length: hh }, (_, i) => i ? `<span style="top:calc(var(--hour) * ${i})">${fmtT(pad(H0 + i) + ':00').replace(':00', '')}</span>` : '').join('')}</div>`;
   const cols = days.map(x => {
@@ -754,7 +789,7 @@ function vGrid(start, n) {
     layoutLanes(evs);
     return `<div class="dcol ${x === td ? 'today' : ''}" data-act="slot" data-id="${x}" style="height:calc(var(--hour) * ${hh})">${evs.map(o => {
       const top = (o.s - H0 * 60) / 60, h = Math.max((o.en - o.s) / 60, .45), st = evStyle(o.e), w = 100 / o.lanes;
-      return `<button class="ev ${st.cls}" data-act="ev" data-id="${o.e.id}" style="top:calc(var(--hour) * ${top});height:calc(var(--hour) * ${h} - 2px);left:calc(${o.lane * w}% + 2px);width:calc(${w}% - 4px);${st.style}"><b>${esc(o.e.title)}</b>${h >= .9 ? `<span class="t tn">${fmtRange(o.e)}</span>` : ''}${h >= 1.2 ? avatars(o.e.memberIds) : ''}</button>`;
+      return `<button class="ev ${st.cls}" data-act="ev" data-id="${o.e.id}" data-day="${x}" style="top:calc(var(--hour) * ${top});height:calc(var(--hour) * ${h} - 2px);left:calc(${o.lane * w}% + 2px);width:calc(${w}% - 4px);${st.style}"><b>${esc(o.e.title)}</b>${h >= .9 ? `<span class="t tn">${fmtRange(o.e)}</span>` : ''}${h >= 1.2 ? avatars(o.e.memberIds) : ''}</button>`;
     }).join('')}${x === td ? '<div class="nowline" id="nowline"></div>' : ''}</div>`;
   }).join('');
   return `<div class="tg">${head}${allday}<div class="tg-row tg-body" style="--cols:${n}">${hours}${cols}</div></div>`;
@@ -791,7 +826,7 @@ function vAgenda() {
   for (let i = 0; i < 21; i++) {
     const x = addDays(ui.cursor, i), evs = eventsOn(x); if (!evs.length) continue;
     const dd = pd(x);
-    out += `<div class="agday"><h3 class="${x === td ? 'today' : ''}">${x === td ? 'Today · ' : ''}${DOWL[dd.getDay()]}, ${MON[dd.getMonth()]} ${dd.getDate()}</h3>${evs.map(e => { const s = evStyle(e); return `<button class="agrow ${s.cls}" style="${s.style}" data-act="ev" data-id="${e.id}"><span class="t tn">${e.allDay ? 'All day' : fmtT(e.start)}</span><b>${esc(e.title)}</b>${avatars(e.memberIds)}</button>`; }).join('')}</div>`;
+    out += `<div class="agday"><h3 class="${x === td ? 'today' : ''}">${x === td ? 'Today · ' : ''}${DOWL[dd.getDay()]}, ${MON[dd.getMonth()]} ${dd.getDate()}</h3>${evs.map(e => { const s = evStyle(e); return `<button class="agrow ${s.cls}" style="${s.style}" data-act="ev" data-id="${e.id}" data-day="${x}"><span class="t tn">${e.allDay ? 'All day' : fmtT(e.start)}</span><b>${esc(e.title)}</b>${avatars(e.memberIds)}</button>`; }).join('')}</div>`;
   }
   return out ? `<div class="ag">${out}</div>` : `<div class="empty"><h3>Nothing planned for the next three weeks</h3><p>Tap + to add an event, or import a calendar from Google or Apple in Family settings.</p></div>`;
 }
@@ -826,11 +861,12 @@ function vRewards() {
   const rw = all('rewards').sort((a, b) => a.cost - b.cost);
   const hist = all('redemptions').sort((a, b) => b.at - a.at).slice(0, 12);
   return `<div class="toolbar"><h2>Stars & rewards</h2>${canWrite ? '<button class="btn" data-act="reward-new">Add reward</button>' : ''}</div>
-  <div class="grid-cards">${members().map(m => { const b = starBalance(m.id); return `<section class="card m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1"><h3>${esc(m.name)}</h3><div class="meta tn">${b.earned} earned · ${b.spent} spent</div></div><span class="bal tn" data-stars="${m.id}">★ ${b.bal}</span></div>
+  <div class="grid-cards">${members().map(m => { const b = starBalance(m.id); return `<section class="card m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1"><h3>${esc(m.name)}</h3><div class="meta tn">${b.earned} earned · ${b.spent} spent${b.adj ? ` · ${b.adj > 0 ? '+' : ''}${b.adj} adjusted` : ''}</div></div><span class="bal tn" data-stars="${m.id}">★ ${b.bal}</span></div>
+    <button class="btn" data-act="adjust" data-id="${m.id}" style="height:30px;font-size:13px;margin-bottom:6px">Adjust stars</button>
     ${rw.length ? rw.map(r => `<div class="reward"><span class="ct"><b>${esc(r.title)}</b><small class="stars">★ ${r.cost}</small></span><button class="btn ${b.bal >= r.cost ? 'primary' : ''}" data-act="redeem" data-id="${r.id}" data-m="${m.id}" ${b.bal >= r.cost ? '' : 'disabled style="opacity:.5"'}>${b.bal >= r.cost ? 'Redeem' : `${r.cost - b.bal} to go`}</button></div>`).join('') : '<p class="note">Add rewards like “Pick the movie” or “30 min screen time”.</p>'}
   </section>`; }).join('')}</div>
   ${rw.length && canWrite ? `<h3 class="section-title">Reward list</h3><div class="card">${rw.map(r => `<div class="reward"><span class="ct"><b>${esc(r.title)}</b></span><span class="stars">★ ${r.cost}</span><button class="edit" data-act="reward-edit" data-id="${r.id}" aria-label="Edit">${svg('pen')}</button></div>`).join('')}</div>` : ''}
-  ${hist.length ? `<h3 class="section-title">Recently redeemed</h3><div class="card">${hist.map(h => `<div class="reward hist">${avatar(h.memberId, true)}<span class="ct">${esc((member(h.memberId) || {}).name || 'Someone')} redeemed <b style="display:inline">${esc(h.title)}</b></span><span class="tn">−${h.cost} ★</span></div>`).join('')}</div>` : ''}`;
+  ${hist.length ? `<h3 class="section-title">Recent star activity</h3><div class="card">${hist.map(h => `<div class="reward hist">${avatar(h.memberId, true)}<span class="ct">${esc((member(h.memberId) || {}).name || 'Someone')} ${h.adjust ? '' : 'redeemed '}<b style="display:inline">${esc(h.title)}</b></span><span class="tn">${h.adjust ? (h.cost < 0 ? '+' + -h.cost : '−' + h.cost) : '−' + h.cost} ★</span></div>`).join('')}</div>` : ''}`;
 }
 
 /* ---------- lists ---------- */
@@ -864,11 +900,20 @@ function vSettings() {
   return `<div class="settings"><div class="toolbar"><h2>Family & settings</h2></div>
   <section class="card"><h3>Household</h3><form data-form="family" style="margin-top:12px"><label class="field"><span>Family name</span><input type="text" id="famName" value="${esc(familyName())}" ${canWrite ? '' : 'disabled'}></label>${canWrite ? '<button class="btn primary" type="submit">Save name</button>' : ''}</form></section>
   <section class="card"><h3>People</h3><div style="margin-top:10px">${ms.map(m => `<div class="reward">${avatar(m.id)}<span class="ct"><b>${esc(m.name)}</b><small class="note">${m.role ? esc(m.role) : ''}</small></span>${canWrite ? `<button class="btn" data-act="member-edit" data-id="${m.id}">Edit</button>` : ''}</div>`).join('') || '<p class="note">No one added yet.</p>'}</div>${canWrite ? '<button class="btn primary" data-act="member-new" style="margin-top:10px">Add person</button>' : ''}</section>
-  <section class="card"><h3>Import a calendar</h3><p class="note">Export an .ics file from Google Calendar (Settings → Import & export) or Apple Calendar (File → Export), then bring it in here. Re-importing the same file updates events instead of duplicating them.</p>${canWrite ? '<button class="btn primary" data-act="ics">Import .ics file</button>' : ''}</section>
+  <section class="card"><h3>Parent PIN</h3>${parentPin() ? `<p class="note">On. Kids can check off chores, add events and redeem rewards. Settings, chores, rewards, people, star changes and deleting events need the PIN.${lsGet('kb-parent-device', false) ? ' This device stays unlocked.' : ''}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="pin-set">Change PIN</button><button class="btn" data-act="pin-lock">Lock now</button><button class="btn danger" data-act="pin-remove">Remove PIN</button></div>` : '<p class="note">Off. Anyone using Kinboard can change everything. Set a PIN so kids can check off chores and redeem rewards, but not edit chores, change stars or delete events.</p><button class="btn primary" data-act="pin-set">Set a parent PIN</button>'}</section>
+  <section class="card"><h3>Calendars</h3><p class="note">Subscribe to Google, Apple or Outlook calendars to keep them in sync automatically, or import a one-time .ics file.</p>
+    ${all('feeds').map(fd => { const st = lsGet(`kb-feed-${fd.id}`, {}); return `<div class="reward">${avatars(fd.memberIds)}<span class="ct"><b>${esc(fd.name)}</b><small class="note">${st.at ? (st.ok ? `${st.n} events · checked ${fmtT(fromMin(new Date(st.at).getHours() * 60 + new Date(st.at).getMinutes()))}` : `Problem: ${esc(st.err || 'sync failed')}`) : 'Not synced yet'}</small></span><button class="btn" data-act="feed-edit" data-id="${fd.id}">Edit</button></div>`; }).join('')}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${mode === 'cloud' ? '<button class="btn primary" data-act="feed-new">Subscribe to a calendar</button>' : ''}${all('feeds').length ? '<button class="btn" data-act="feeds-sync">Sync now</button>' : ''}<button class="btn" data-act="ics">Import .ics file</button></div>
+    ${mode === 'cloud' ? '' : '<p class="note" style="margin-top:8px">Turn on family sync to subscribe to calendars.</p>'}</section>
+  <section class="card"><h3>Weather</h3><p class="note">${famSettings().weather ? `Showing weather for ${esc(famSettings().weather.place)} in °${famSettings().weather.unit || 'F'}.` : 'Show the temperature and today’s forecast.'}</p><button class="btn" data-act="weather">${famSettings().weather ? 'Change location' : 'Set location'}</button></section>
+  <section class="card"><h3>Photos</h3><p class="note">Family photos for the wall display's screensaver. Photos are resized before uploading and shared with everyone in your family.</p>
+    ${mode === 'cloud' ? `<div class="thumbs">${all('photos').sort((a, b) => b.at - a.at).map(ph => `<figure><img data-photo="${ph.id}" alt="Family photo"><button class="edit" data-act="photo-del" data-id="${ph.id}" aria-label="Delete photo">✕</button></figure>`).join('')}</div>
+    <input type="file" id="photoFile" accept="image/*" multiple hidden><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn primary" data-act="photo-add">Add photos</button>${all('photos').length ? '<button class="btn" data-act="saver-test">Preview screensaver</button>' : ''}</div>` : '<p class="note">Turn on family sync to add photos.</p>'}</section>
   <section class="card"><h3>Wall display</h3><p class="note">For a touchscreen mounted at home. These settings apply to this screen only.</p>
     <label class="check"><input type="checkbox" id="wallOn" data-wall="on" ${wall.on ? 'checked' : ''}> Wall display mode</label>
     <p class="note" style="margin-top:-6px">Larger text and touch targets, keeps the screen on, goes back to Today after
       <select id="idleMin" data-wall="idle" style="width:auto;height:34px">${[1, 2, 5, 10].map(v => `<option value="${v}" ${wall.idleMin === v ? 'selected' : ''}>${v}</option>`).join('')}</select> min without a touch, and reloads at 3:30 AM to pick up app updates.</p>
+    <label class="check">Photo screensaver after <select id="saverMin" data-wall="saver" style="width:auto;height:34px;margin:0 6px">${[[0, 'never'], [5, '5 min'], [10, '10 min'], [15, '15 min'], [30, '30 min']].map(([v, l]) => `<option value="${v}" ${wall.saverMin === v ? 'selected' : ''}>${l}</option>`).join('')}</select> without a touch</label>
     <label class="check"><input type="checkbox" id="nightOn" data-wall="night" ${wall.nightOn ? 'checked' : ''}> Night clock from <input type="time" id="nightFrom" data-wall="from" value="${wall.from}" style="width:auto"> to <input type="time" id="nightTo" data-wall="to" value="${wall.to}" style="width:auto"></label>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="sleep">Show sleep clock now</button><button class="btn" data-act="fullscreen">Full screen</button><button class="btn" data-act="theme">Theme: ${({ light: 'Light', dark: 'Dark' })[document.documentElement.dataset.theme] || 'System'}</button></div></section>
   <section class="card"><h3>Family sync</h3>
@@ -917,35 +962,69 @@ function wirePick(f, single) {
   }));
 }
 
-function editEvent(id, preset = {}) {
+function editEvent(id, preset = {}, occDay = null) {
   const e = id ? get('events', id) : { title: '', date: preset.date || ui.cursor, start: preset.start || '09:00', end: preset.end || '10:00', allDay: false, memberIds: [...ui.filter], repeat: 'none' };
+  if (!e) return;
+  if (e.feed) return feedEventInfo(e, occDay);
   if (!canWrite) { const d = pd(e.date); toast(`${e.title} · ${DOW[d.getDay()]} ${MON[d.getMonth()].slice(0, 3)} ${d.getDate()} · ${fmtRange(e)}`); return; }
+  const isRec = !!id && e.repeat && e.repeat !== 'none';
+  const occ = isRec && occDay && occursOn(e, occDay) ? occDay : null;
+  const { id: _i, ...orig } = e;
   openSheet(`<h2>${id ? 'Edit event' : 'New event'}</h2>
+    ${occ ? `<div class="field"><span>Change</span><div class="pick days" data-pick="scope"><button type="button" data-v="this" aria-pressed="true">This event</button><button type="button" data-v="future" aria-pressed="false">This and following</button><button type="button" data-v="all" aria-pressed="false">All events</button></div></div>` : ''}
     <label class="field"><span>Title</span><input type="text" id="evTitle" name="title" required value="${esc(e.title)}" placeholder="Soccer practice"></label>
     <label class="check"><input type="checkbox" id="evAll" name="allDay" ${e.allDay ? 'checked' : ''}> All day</label>
-    <div class="two"><label class="field"><span>Date</span><input type="date" id="evDate" name="date" required value="${e.date}"></label>
+    <div class="two"><label class="field"><span>Date</span><input type="date" id="evDate" name="date" required value="${occ || e.date}"></label>
       <label class="field" data-show="allday"><span>Ends</span><input type="date" id="evEndDate" name="endDate" value="${e.endDate || e.date}"></label></div>
     <div class="two" data-show="timed"><label class="field"><span>Starts</span><input type="time" id="evStart" name="start" value="${e.start || '09:00'}"></label><label class="field"><span>Ends</span><input type="time" id="evEnd" name="end" value="${e.end || '10:00'}"></label></div>
     <div class="field"><span>Who</span>${memberPicker(e.memberIds || [])}</div>
-    <div class="two"><label class="field"><span>Repeats</span><select id="evRepeat" name="repeat">${['none', 'daily', 'weekly', 'monthly', 'yearly'].map(r => `<option value="${r}" ${e.repeat === r ? 'selected' : ''}>${r === 'none' ? 'Does not repeat' : r[0].toUpperCase() + r.slice(1)}</option>`).join('')}</select></label>
+    <div class="two" data-show="repwrap"><label class="field"><span>Repeats</span><select id="evRepeat" name="repeat">${['none', 'daily', 'weekly', 'monthly', 'yearly'].map(r => `<option value="${r}" ${e.repeat === r ? 'selected' : ''}>${r === 'none' ? 'Does not repeat' : r[0].toUpperCase() + r.slice(1)}</option>`).join('')}</select></label>
       <label class="field" data-show="rep"><span>Until (optional)</span><input type="date" id="evUntil" name="until" value="${e.until || ''}"></label></div>
+    <div class="field" data-show="weekly"><span>On</span><div class="pick days" data-pick="byDays">${DOW.map((d, i) => `<button type="button" data-v="${i}" aria-pressed="${(e.byDays && e.byDays.length ? e.byDays : [pd(e.date).getDay()]).includes(i)}">${d}</button>`).join('')}</div></div>
     <label class="field"><span>Notes</span><textarea id="evNotes" name="notes" placeholder="Bring shin guards">${esc(e.notes || '')}</textarea></label>
-    ${id && e.repeat && e.repeat !== 'none' ? '<p class="note">Changes apply to every repeat of this event.</p>' : ''}
     ${actions(!!id)}`, f => {
-    const v = Object.fromEntries(new FormData(f));
-    const out = { title: v.title.trim(), date: v.date, allDay: !!v.allDay, memberIds: picked(f, 'mem'), repeat: v.repeat, notes: v.notes.trim() };
+    const v = Object.fromEntries(new FormData(f)), scope = occ ? picked(f, 'scope')[0] || 'this' : 'all';
+    const out = { title: v.title.trim(), date: v.date, allDay: !!v.allDay, memberIds: picked(f, 'mem'), repeat: v.repeat || 'none', notes: v.notes.trim() };
     if (!out.title || !out.date) return;
     if (out.allDay) { if (v.endDate && v.endDate > v.date && out.repeat === 'none') out.endDate = v.endDate; }
     else { out.start = v.start || '09:00'; out.end = v.end && toMin(v.end) > toMin(out.start) ? v.end : fromMin(Math.min(toMin(out.start) + 60, 23 * 60 + 59)); }
     if (out.repeat !== 'none' && v.until) out.until = v.until;
+    if (out.repeat === 'weekly') { const bd = picked(f, 'byDays').map(Number).sort(); if (bd.length > 1 || (bd.length === 1 && bd[0] !== pd(out.date).getDay())) out.byDays = bd; }
+    if (out.repeat !== 'none' && e.interval && e.repeat === out.repeat) out.interval = e.interval;
+    if (out.repeat === 'monthly' && e.nth && e.repeat === 'monthly' && out.date === e.date) out.nth = e.nth;
     if (e.sample) out.sample = true;
     if (e.src) out.src = e.src;
-    put('events', id || uid(), out); closeSheet(); toast(id ? 'Event updated' : 'Event added');
+    if (scope === 'this') {
+      put('events', id, { ...orig, exdates: [...new Set([...(orig.exdates || []), occ])] });
+      const single = { ...out, repeat: 'none' }; delete single.until; delete single.byDays; delete single.interval; delete single.nth;
+      put('events', uid(), single); closeSheet(); toast('This event changed');
+    } else if (scope === 'future' && occ > e.date) {
+      put('events', id, { ...orig, until: addDays(occ, -1) });
+      put('events', uid(), { ...out, exdates: (orig.exdates || []).filter(x => x >= occ) }); closeSheet(); toast('This and following events changed');
+    } else {
+      if (isRec && out.date === e.date && orig.exdates) out.exdates = orig.exdates;
+      put('events', id || uid(), out); closeSheet(); toast(id ? 'Event updated' : 'Event added');
+    }
   }, f => {
-    wirePick(f, []);
-    const sync = () => { const ad = f.allDay.checked, rp = f.repeat.value !== 'none'; f.querySelector('[data-show="allday"]').hidden = !ad || rp; f.querySelector('[data-show="timed"]').hidden = ad; f.querySelector('[data-show="rep"]').hidden = !rp; };
-    f.allDay.onchange = sync; f.repeat.onchange = sync; sync();
-    armDelete(f, () => { del('events', id); toast('Event deleted'); });
+    wirePick(f, ['scope']);
+    const sync = () => { const ad = f.allDay.checked, rp = f.repeat.value !== 'none', sc = occ ? picked(f, 'scope')[0] : 'all';
+      f.querySelector('[data-show="allday"]').hidden = !ad || rp; f.querySelector('[data-show="timed"]').hidden = ad; f.querySelector('[data-show="rep"]').hidden = !rp;
+      f.querySelector('[data-show="weekly"]').hidden = f.repeat.value !== 'weekly' || sc === 'this'; f.querySelector('[data-show="repwrap"]').hidden = sc === 'this'; };
+    f.allDay.onchange = sync; f.repeat.onchange = sync;
+    const sp = f.querySelector('[data-pick="scope"]');
+    if (sp) sp.addEventListener('click', () => setTimeout(() => { const sc = picked(f, 'scope')[0]; f.date.value = sc === 'all' ? e.date : occ; sync(); }, 0));
+    sync();
+    const b = f.querySelector('[data-del]');
+    if (b) b.onclick = () => {
+      if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Tap again to delete'; return; }
+      const scope = occ ? picked(f, 'scope')[0] || 'this' : 'all';
+      const run = () => {
+        if (scope === 'this') { put('events', id, { ...orig, exdates: [...new Set([...(orig.exdates || []), occ])] }); toast('This event deleted'); }
+        else if (scope === 'future' && occ > e.date) { put('events', id, { ...orig, until: addDays(occ, -1) }); toast('This and following events deleted'); }
+        else { del('events', id); toast('Event deleted'); }
+      };
+      if (isParent()) { run(); closeSheet(); } else pinPad('delete events', run);
+    };
   });
 }
 function editMember(id) {
@@ -1044,37 +1123,59 @@ function parseICS(text) {
     else if (name === 'DTSTART') cur.start = dt(params, v);
     else if (name === 'DTEND') cur.end = dt(params, v);
     else if (name === 'RRULE') cur.rrule = v;
+    else if (name === 'EXDATE') (cur.exdates = cur.exdates || []).push(...v.split(',').map(x => (dt(params, x) || {}).date).filter(Boolean));
+    else if (name === 'RECURRENCE-ID') cur.recurId = (dt(params, v) || {}).date;
     else if (name === 'DESCRIPTION') cur.notes = unesc(v).slice(0, 500);
     else if (name === 'STATUS' && v === 'CANCELLED') cur.cancelled = true;
   }
   return out;
 }
 const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
+function rruleFields(rr, start) {
+  const P = Object.fromEntries(String(rr || '').split(';').map(kv => kv.split('=')));
+  const rep = { DAILY: 'daily', WEEKLY: 'weekly', MONTHLY: 'monthly', YEARLY: 'yearly' }[P.FREQ] || 'none', f = { repeat: rep };
+  if (rep === 'none') return f;
+  const iv = Math.max(1, +P.INTERVAL || 1); if (iv > 1) f.interval = iv;
+  const DMAP = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+  if (P.BYDAY) {
+    const parts = P.BYDAY.split(',');
+    if (rep === 'weekly') { const bd = parts.map(x => DMAP[x.slice(-2)]).filter(x => x != null).sort(); if (bd.length) f.byDays = bd; }
+    else if (rep === 'monthly') { const m = parts[0].match(/^([+-]?\d)(\w\w)$/); if (m && DMAP[m[2]] != null) f.nth = { n: +m[1], dow: DMAP[m[2]] }; }
+  }
+  if (P.UNTIL) f.until = `${P.UNTIL.slice(0, 4)}-${P.UNTIL.slice(4, 6)}-${P.UNTIL.slice(6, 8)}`;
+  else if (P.COUNT) {
+    const per = rep === 'weekly' && f.byDays ? f.byDays.length : 1, steps = Math.max(0, Math.ceil(+P.COUNT / per) - 1);
+    f.until = addDays(start, rep === 'daily' ? steps * iv : rep === 'weekly' ? steps * 7 * iv + 6 : rep === 'monthly' ? Math.round(30.44 * steps * iv) + 6 : 366 * steps * iv);
+  }
+  return f;
+}
+function icsToEvents(raw, { mids = [], idp = 'ics-', cutoff = '0000-00-00', max = 400, src } = {}) {
+  const masters = new Map(), out = [];
+  for (const r of raw) if (r.uid && r.rrule && !r.recurId) masters.set(r.uid, r);
+  for (const r of raw) if (r.recurId && masters.has(r.uid)) { const m = masters.get(r.uid); (m.exdates = m.exdates || []).push(r.recurId); }
+  for (const r of raw) {
+    if (r.cancelled && !r.recurId) continue;
+    const rr = r.recurId ? { repeat: 'none' } : rruleFields(r.rrule, r.start.date);
+    const lastDay = rr.repeat === 'none' ? (r.end ? r.end.date : r.start.date) : (rr.until || '9999-12-31');
+    if (lastDay < cutoff || r.cancelled) continue;
+    const e = { title: r.title || 'Untitled', date: r.start.date, allDay: r.start.allDay, memberIds: mids, notes: r.notes || '', ...rr };
+    if (src) e.src = src;
+    if (e.allDay) { if (r.end && r.end.allDay) { const ed = addDays(r.end.date, -1); if (ed > e.date && e.repeat === 'none') e.endDate = ed; } }
+    else { e.start = r.start.time; e.end = r.end && !r.end.allDay && r.end.date === r.start.date && r.end.time > r.start.time ? r.end.time : fromMin(Math.min(toMin(e.start) + 60, 1439)); }
+    if (r.exdates && e.repeat !== 'none') e.exdates = [...new Set(r.exdates)].filter(x => x >= cutoff).sort();
+    out.push([idp + hash((r.uid || (r.title + r.start.date + (r.start.time || ''))) + '|' + (r.recurId || '')), e]);
+    if (out.length >= max) break;
+  }
+  return out;
+}
 function importICS() {
-  openSheet(`<h2>Import a calendar</h2>
+  openSheet(`<h2>Import a calendar file</h2>
     <label class="field"><span>Calendar file (.ics)</span><input type="file" id="icsFile" accept=".ics,text/calendar" style="height:auto;padding:10px"></label>
     <div class="field"><span>Whose calendar is this?</span>${memberPicker([...ui.filter])}</div>
-    <p class="note">Imports events from the last 30 days onward, plus repeating events. Up to 400 events per file.</p>
+    <p class="note">Imports events from the last 30 days onward, plus repeating events. Up to 400 events per file. For a calendar that keeps updating, use Subscribe instead.</p>
     <div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" type="submit" id="icsGo">Import</button></div>`, async f => {
     const file = f.querySelector('#icsFile').files[0]; if (!file) { toast('Choose an .ics file first'); return; }
-    const mids = picked(f, 'mem'), cutoff = addDays(today(), -30);
-    const raw = parseICS(await file.text());
-    const rows = [];
-    for (const r of raw) {
-      if (r.cancelled) continue;
-      const freq = ((r.rrule || '').match(/FREQ=(\w+)/) || [])[1];
-      const rep = { DAILY: 'daily', WEEKLY: 'weekly', MONTHLY: 'monthly', YEARLY: 'yearly' }[freq] || 'none';
-      const until = ((r.rrule || '').match(/UNTIL=(\d{8})/) || [])[1];
-      const untilDs = until ? `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}` : '';
-      const lastDay = rep === 'none' ? (r.end ? r.end.date : r.start.date) : (untilDs || '9999-12-31');
-      if (lastDay < cutoff) continue;
-      const e = { title: r.title || 'Untitled', date: r.start.date, allDay: r.start.allDay, memberIds: mids, repeat: rep, notes: r.notes || '', src: 'ics' };
-      if (e.allDay) { if (r.end && r.end.allDay) { const ed = addDays(r.end.date, -1); if (ed > e.date && rep === 'none') e.endDate = ed; } }
-      else { e.start = r.start.time; e.end = r.end && !r.end.allDay && r.end.date === r.start.date && r.end.time > r.start.time ? r.end.time : fromMin(Math.min(toMin(e.start) + 60, 1439)); }
-      if (untilDs && rep !== 'none') e.until = untilDs;
-      rows.push(['events', 'ics-' + hash((r.uid || '') + r.title + r.start.date + (r.start.time || '')), e]);
-      if (rows.length >= 400) break;
-    }
+    const rows = icsToEvents(parseICS(await file.text()), { mids: picked(f, 'mem'), cutoff: addDays(today(), -30), src: 'ics' }).map(([id, e]) => ['events', id, e]);
     if (!rows.length) { toast('No upcoming events found in that file'); return; }
     const btn = f.querySelector('#icsGo'); btn.disabled = true; btn.textContent = `Importing ${rows.length}…`;
     const n = await putMany(rows); closeSheet(); toast(`Imported ${n} events`);
@@ -1136,6 +1237,257 @@ function renderSleep() {
 }
 let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+
+/* ---------- family settings helper ---------- */
+const famSettings = () => get('settings', 'family') || {};
+function updFamily(patch) { const { id: _i, ...rest } = famSettings(); put('settings', 'family', { ...rest, ...patch, sample: false }); }
+const canon = o => Array.isArray(o) ? `[${o.map(canon).join(',')}]` : o && typeof o === 'object' ? `{${Object.keys(o).sort().map(k => JSON.stringify(k) + ':' + canon(o[k])).join(',')}}` : JSON.stringify(o);
+async function sha256hex(s) { const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join(''); }
+
+/* ---------- parent PIN: kids can check off chores, add events and redeem; parents unlock the rest ---------- */
+let parentUntil = 0, pinFails = 0, pinLockUntil = 0;
+const parentPin = () => famSettings().pin || null;
+const isParent = () => !parentPin() || lsGet('kb-parent-device', false) || Date.now() < parentUntil;
+function withParent(why, fn) { if (isParent()) return fn(); pinPad(why, fn); }
+async function pinMatches(val, pin) { return !!pin && (await sha256hex(`${pin.salt}|${val}`)) === pin.hash; }
+function pinPad(why, onOk) {
+  const pin = parentPin(); let val = '';
+  const draw = () => { const d = $('#pinDots'); if (d) d.innerHTML = Array.from({ length: Math.max(pin.len || 4, val.length) }, (_, i) => `<i class="${i < val.length ? 'on' : ''}"></i>`).join(''); };
+  const say = t => { const m = $('#pinMsg'); if (m) m.textContent = t; };
+  const tryPin = async () => {
+    if (pinLockUntil > Date.now()) { say(`Too many tries. Wait ${Math.ceil((pinLockUntil - Date.now()) / 1000)} seconds.`); return; }
+    if (await pinMatches(val, pin)) {
+      pinFails = 0; parentUntil = Date.now() + 5 * 60e3;
+      if ($('#pinKeep') && $('#pinKeep').checked) lsSet('kb-parent-device', true);
+      closeSheet(); onOk();
+    } else {
+      pinFails++; val = ''; draw();
+      const pad = $('.pinpad'); if (pad) { pad.classList.remove('shake'); void pad.offsetWidth; pad.classList.add('shake'); }
+      if (pinFails >= 5) { pinLockUntil = Date.now() + 30e3; pinFails = 0; say('Too many tries. Wait 30 seconds.'); } else say('Wrong PIN. Try again.');
+    }
+  };
+  openSheet(`<h2>Parent PIN</h2><p class="note">Enter the parent PIN to ${esc(why)}.</p>
+    <div class="pindots tn" id="pinDots" aria-hidden="true"></div>
+    <div class="pinpad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" data-k="${n}">${n}</button>`).join('')}<button type="button" data-k="back" aria-label="Delete digit">⌫</button><button type="button" data-k="0">0</button><button type="submit" class="ok" aria-label="Unlock">✓</button></div>
+    <label class="check"><input type="checkbox" id="pinKeep"> Keep this device unlocked (a parent's own phone)</label>
+    <p class="note" id="pinMsg" role="status"></p>
+    <div class="actions"><button type="button" class="btn" data-act="close">Cancel</button></div>`, () => tryPin(), f => {
+    draw();
+    f.querySelector('.pinpad').addEventListener('click', e => {
+      const b = e.target.closest('[data-k]'); if (!b) return;
+      if (b.dataset.k === 'back') val = val.slice(0, -1); else if (val.length < 8) val += b.dataset.k;
+      draw(); if (pin.len && val.length === pin.len) tryPin();
+    });
+    f.addEventListener('keydown', e => { if (/^\d$/.test(e.key) && val.length < 8) { val += e.key; draw(); if (pin.len && val.length === pin.len) tryPin(); } else if (e.key === 'Backspace') { val = val.slice(0, -1); draw(); } });
+    f.tabIndex = -1; f.focus();
+  });
+}
+function setPinSheet() {
+  openSheet(`<h2>${parentPin() ? 'Change' : 'Set'} parent PIN</h2>
+    <p class="note">4 to 8 digits. With a PIN, kids can still check off chores, add events and redeem rewards. Opening Family settings, editing chores, rewards and people, changing stars and deleting events need the PIN.</p>
+    <label class="field"><span>New PIN</span><input type="password" id="pin1" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="off" required></label>
+    <label class="field"><span>Type it again</span><input type="password" id="pin2" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="off" required></label>
+    <p class="note" id="pinSetMsg" role="status"></p>
+    ${actions(false)}`, async f => {
+    const a = f.querySelector('#pin1').value, b = f.querySelector('#pin2').value;
+    if (!/^\d{4,8}$/.test(a)) { $('#pinSetMsg').textContent = 'Use 4 to 8 digits.'; return; }
+    if (a !== b) { $('#pinSetMsg').textContent = 'The two PINs don’t match.'; return; }
+    const salt = uid() + uid();
+    updFamily({ pin: { salt, hash: await sha256hex(`${salt}|${a}`), len: a.length } });
+    parentUntil = Date.now() + 5 * 60e3; closeSheet(); toast('Parent PIN saved');
+  });
+}
+
+/* ---------- star adjustments (parents) ---------- */
+function adjustStars(mid) {
+  const m = member(mid); if (!m) return;
+  openSheet(`<h2>Adjust ${esc(m.name)}'s stars</h2>
+    <p class="note">Current balance ★ ${starBalance(mid).bal}. Use a negative number to take stars away.</p>
+    <div class="two"><label class="field"><span>Stars</span><input type="number" id="adjN" min="-500" max="500" step="1" value="5" required></label>
+    <label class="field"><span>Reason</span><input type="text" id="adjWhy" placeholder="Helped with groceries" maxlength="80"></label></div>
+    ${actions(false)}`, f => {
+    const n = Math.max(-500, Math.min(500, Math.round(Number(f.querySelector('#adjN').value) || 0))); if (!n) return;
+    const why = f.querySelector('#adjWhy').value.trim() || (n > 0 ? 'Bonus stars' : 'Stars removed');
+    put('redemptions', uid(), { memberId: mid, title: why, cost: -n, adjust: true, at: Date.now() });
+    closeSheet(); toast(`${n > 0 ? '+' : ''}${n} ★ for ${m.name}`);
+  });
+}
+
+/* ---------- weather (Open-Meteo, no key) ---------- */
+const WX = { 0: ['☀️', 'Clear'], 1: ['🌤️', 'Mostly clear'], 2: ['⛅', 'Partly cloudy'], 3: ['☁️', 'Cloudy'], 45: ['🌫️', 'Fog'], 48: ['🌫️', 'Fog'], 51: ['🌦️', 'Drizzle'], 53: ['🌦️', 'Drizzle'], 55: ['🌦️', 'Drizzle'], 56: ['🌧️', 'Freezing drizzle'], 57: ['🌧️', 'Freezing drizzle'], 61: ['🌧️', 'Rain'], 63: ['🌧️', 'Rain'], 65: ['🌧️', 'Heavy rain'], 66: ['🌧️', 'Freezing rain'], 67: ['🌧️', 'Freezing rain'], 71: ['🌨️', 'Snow'], 73: ['🌨️', 'Snow'], 75: ['❄️', 'Heavy snow'], 77: ['🌨️', 'Snow grains'], 80: ['🌦️', 'Showers'], 81: ['🌧️', 'Showers'], 82: ['⛈️', 'Heavy showers'], 85: ['🌨️', 'Snow showers'], 86: ['🌨️', 'Snow showers'], 95: ['⛈️', 'Thunderstorm'], 96: ['⛈️', 'Thunderstorm'], 99: ['⛈️', 'Thunderstorm'] };
+let wxData = lsGet('kb-wx', null), wxBusy = false;
+async function refreshWeather(force) {
+  const w = famSettings().weather; if (!w || wxBusy) return;
+  const key = `${w.lat},${w.lon},${w.unit}`;
+  if (!force && wxData && wxData.key === key && Date.now() - wxData.at < 30 * 60e3) return;
+  wxBusy = true;
+  try {
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${w.lat}&longitude=${w.lon}&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2${w.unit === 'C' ? '' : '&temperature_unit=fahrenheit'}`;
+    const r = await fetch(u); if (!r.ok) throw 0;
+    const j = await r.json();
+    wxData = { key, at: Date.now(), now: { t: Math.round(j.current.temperature_2m), code: j.current.weather_code, day: j.current.is_day }, today: { hi: Math.round(j.daily.temperature_2m_max[0]), lo: Math.round(j.daily.temperature_2m_min[0]), code: j.daily.weather_code[0], rain: j.daily.precipitation_probability_max[0] } };
+    lsSet('kb-wx', wxData); renderTop(); if (ui.tab === 'today') queueRender();
+  } catch {} finally { wxBusy = false; }
+}
+const wxIcon = (code, day = 1) => (code === 0 && !day ? '🌙' : (WX[code] || ['🌡️'])[0]);
+function wxBadge() {
+  const w = famSettings().weather; if (!w || !wxData || wxData.key !== `${w.lat},${w.lon},${w.unit}`) return '';
+  return `<span class="wx tn" title="${esc((WX[wxData.now.code] || [, ''])[1])} in ${esc(w.place)}">${wxIcon(wxData.now.code, wxData.now.day)} ${wxData.now.t}°</span>`;
+}
+function wxToday() {
+  const w = famSettings().weather; if (!w || !wxData || wxData.key !== `${w.lat},${w.lon},${w.unit}`) return '';
+  const d = wxData.today;
+  return `<span class="wxday tn">${wxIcon(d.code)} ${esc((WX[d.code] || [, ''])[1])} · High ${d.hi}° · Low ${d.lo}°${d.rain != null ? ` · ${d.rain}% rain` : ''}</span>`;
+}
+function weatherSheet() {
+  const w = famSettings().weather || {};
+  openSheet(`<h2>Weather</h2><p class="note">Shows the temperature in the header and today's forecast on the Today screen. Forecasts come from Open-Meteo.</p>
+    <div class="additem"><input type="text" id="wxQ" placeholder="Town or city" value="${esc(w.place || '')}" aria-label="Town or city"><button type="button" class="btn" id="wxFind">Search</button></div>
+    <div id="wxRes" class="pick" style="flex-direction:column;align-items:stretch"></div>
+    <div class="field"><span>Units</span><div class="pick" data-pick="unit"><button type="button" data-v="F" aria-pressed="${w.unit !== 'C'}">°F</button><button type="button" data-v="C" aria-pressed="${w.unit === 'C'}">°C</button></div></div>
+    <div class="actions">${w.place ? '<button type="button" class="btn danger" data-del>Turn off weather</button>' : ''}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" type="submit">Save</button></div>`, f => {
+    const sel = f.querySelector('#wxRes [aria-pressed="true"]'), unit = picked(f, 'unit')[0] || 'F';
+    const loc = sel ? JSON.parse(sel.dataset.loc) : (w.place ? { lat: w.lat, lon: w.lon, place: w.place } : null);
+    if (!loc) { toast('Search for your town and pick it first'); return; }
+    updFamily({ weather: { ...loc, unit } }); closeSheet(); setTimeout(() => refreshWeather(true), 50); toast(`Weather for ${loc.place}`);
+  }, f => {
+    wirePick(f, ['unit']);
+    const find = async () => {
+      const q = f.querySelector('#wxQ').value.trim(); if (q.length < 2) return;
+      const box = f.querySelector('#wxRes'); box.innerHTML = '<p class="note">Searching…</p>';
+      try {
+        const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=5&language=en&name=${encodeURIComponent(q)}`); const j = await r.json();
+        const res = (j.results || []).map(x => ({ lat: +x.latitude.toFixed(3), lon: +x.longitude.toFixed(3), place: [x.name, x.admin1, x.country_code].filter(Boolean).join(', ') }));
+        box.innerHTML = res.length ? res.map((x, i) => `<button type="button" data-v="${i}" data-loc="${esc(JSON.stringify(x))}" aria-pressed="${i === 0}">${esc(x.place)}</button>`).join('') : '<p class="note">No places found.</p>';
+        box.dataset.pick = 'loc'; wirePick(f, ['unit', 'loc']);
+      } catch { box.innerHTML = '<p class="note">Could not search right now. Check the connection.</p>'; }
+    };
+    f.querySelector('#wxFind').onclick = find;
+    f.querySelector('#wxQ').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); find(); } });
+    armDelete(f, () => { updFamily({ weather: null }); wxData = null; lsSet('kb-wx', null); });
+  });
+}
+
+/* ---------- calendar subscriptions (Google / Apple / Outlook secret iCal links) ---------- */
+async function syncFeed(f) {
+  const r = await fetch(`${CFG.url}/functions/v1/kb-ics`, { method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ code: famCode, url: f.url }) });
+  if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(({ bad_url: 'That link is not a valid https or webcal address', not_a_calendar: 'That link is not a calendar', calendar_too_large: 'That calendar is too large', fetch_failed: 'The calendar could not be reached' })[j.error] || (j.error && j.error.startsWith('calendar_http_') ? `The calendar server said ${j.error.slice(14)}` : 'Sync failed')); }
+  const evs = icsToEvents(parseICS(await r.text()), { mids: f.memberIds || [], idp: `feed-${f.id}-`, cutoff: addDays(today(), -30), max: 1000 });
+  const keep = new Set(), rows = [];
+  for (const [id, e] of evs) { e.feed = f.id; keep.add(id); const cur = S.events.get(id); if (!cur || canon(cur) !== canon(e)) rows.push(['events', id, e]); }
+  const gone = all('events').filter(e => e.feed === f.id && !keep.has(e.id));
+  if (rows.length) await putMany(rows);
+  for (const e of gone) del('events', e.id);
+  return { n: evs.length, changed: rows.length + gone.length };
+}
+let feedsBusy = false;
+async function syncFeeds(force) {
+  if (mode !== 'cloud' || feedsBusy) return;
+  feedsBusy = true;
+  try {
+    for (const f of all('feeds')) {
+      const st = lsGet(`kb-feed-${f.id}`, {});
+      if (!force && st.at && Date.now() - st.at < 30 * 60e3) continue;
+      try { const r = await syncFeed(f); lsSet(`kb-feed-${f.id}`, { at: Date.now(), ok: true, n: r.n }); }
+      catch (e) { lsSet(`kb-feed-${f.id}`, { at: Date.now(), ok: false, err: e.message }); }
+    }
+  } finally { feedsBusy = false; if (ui.tab === 'settings') queueRender(); }
+}
+setInterval(() => { if (document.visibilityState === 'visible') syncFeeds(false); }, 5 * 60e3);
+function feedSheet(id) {
+  const fd = id ? get('feeds', id) : { name: '', url: '', memberIds: [...ui.filter] };
+  openSheet(`<h2>${id ? 'Edit calendar' : 'Subscribe to a calendar'}</h2>
+    <p class="note"><b>Google:</b> Google Calendar on a computer → Settings → pick the calendar → Integrate calendar → copy “Secret address in iCal format”.<br><b>Apple:</b> Calendar app → tap ⓘ next to a calendar → turn on Public Calendar → Share Link.<br><b>Outlook:</b> Settings → Calendar → Shared calendars → Publish → copy the ICS link.</p>
+    <label class="field"><span>Name</span><input type="text" id="fdName" required maxlength="40" value="${esc(fd.name)}" placeholder="Dad's work"></label>
+    <label class="field"><span>Calendar link</span><input type="text" id="fdUrl" required value="${esc(fd.url)}" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <div class="field"><span>Whose events are these?</span>${memberPicker(fd.memberIds || [])}</div>
+    <p class="note">Kinboard checks for changes every 30 minutes. Events from this calendar are read-only here; change them in the original calendar. Anyone in your family can see this link.</p>
+    ${actions(!!id)}`, async f => {
+    const name = f.querySelector('#fdName').value.trim(), url = f.querySelector('#fdUrl').value.trim();
+    if (!name || !/^(https|webcals?):\/\//i.test(url)) { toast('Paste a link that starts with https:// or webcal://'); return; }
+    const fid = id || uid(), doc = { name, url, memberIds: picked(f, 'mem') };
+    put('feeds', fid, doc); closeSheet(); toast(`Syncing ${name}…`);
+    try { const r = await syncFeed({ id: fid, ...doc }); lsSet(`kb-feed-${fid}`, { at: Date.now(), ok: true, n: r.n }); toast(`${name}: ${r.n} events synced`); }
+    catch (e) { lsSet(`kb-feed-${fid}`, { at: Date.now(), ok: false, err: e.message }); toast(`${name}: ${e.message}`); }
+    queueRender();
+  }, f => { wirePick(f, []); armDelete(f, () => { del('feeds', id); all('events').filter(e => e.feed === id).forEach(e => del('events', e.id)); toast('Calendar removed'); }); });
+}
+function feedEventInfo(e, day) {
+  const fd = get('feeds', e.feed) || { name: 'a subscribed calendar' }, d = pd(day || e.date);
+  openSheet(`<h2>${esc(e.title)}</h2><p>${DOWL[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()} · ${fmtRange(e)}</p>${e.notes ? `<p class="note">${esc(e.notes)}</p>` : ''}
+    <p class="note">From <b>${esc(fd.name)}</b>. Change it in that calendar and Kinboard updates within 30 minutes.</p>
+    <div class="actions"><button type="button" class="btn primary" data-act="close">Close</button></div>`, () => closeSheet());
+}
+
+/* ---------- photos: stored per family on the server, cached on each screen ---------- */
+const photoURLs = new Map();
+const photoKey = id => { try { return new Request(new URL('./__kb_photo/' + encodeURIComponent(id), location.href).href); } catch { return null; } };
+async function photoURL(id) {
+  if (photoURLs.has(id)) return photoURLs.get(id);
+  let blob = null; const key = photoKey(id);
+  try { if (window.caches && key) { const c = await caches.open('kb-photos'); const hit = await c.match(key); if (hit) blob = await hit.blob(); } } catch {}
+  if (!blob) {
+    const rows = await rpc('kb_photo_get', { code: famCode, photo_id: id }); if (!rows || !rows.length) return null;
+    const bin = atob(rows[0].b64), arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    blob = new Blob([arr], { type: rows[0].mime });
+    try { if (window.caches && key) { const c = await caches.open('kb-photos'); await c.put(key, new Response(blob)); } } catch {}
+  }
+  const u = URL.createObjectURL(blob); photoURLs.set(id, u); return u;
+}
+async function shrinkPhoto(file) {
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+  for (const [max, q] of [[1920, 0.82], [1600, 0.78], [1280, 0.72], [1024, 0.68]]) {
+    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight)), w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h);
+    const b64 = cv.toDataURL('image/jpeg', q).split(',')[1];
+    if (b64.length * 0.75 < 580000) { URL.revokeObjectURL(img.src); return { b64, w, h }; }
+  }
+  throw new Error('too_large');
+}
+async function uploadPhotos(files) {
+  if (mode !== 'cloud') { toast('Turn on family sync to add photos.'); return; }
+  let ok = 0;
+  for (const file of [...files].slice(0, 30)) {
+    if (!/^image\//.test(file.type)) continue;
+    toast(`Adding photo ${ok + 1}…`);
+    try { const p = await shrinkPhoto(file), id = uid(); await rpc('kb_photo_put', { code: famCode, photo_id: id, mime: 'image/jpeg', b64: p.b64 }); put('photos', id, { w: p.w, h: p.h, at: Date.now() }); ok++; }
+    catch (e) { toast(/too_many/.test(e.message || '') ? 'Photo limit reached (300).' : 'One photo could not be added.'); }
+  }
+  toast(`Added ${ok} photo${ok === 1 ? '' : 's'}`);
+}
+async function deletePhoto(id) {
+  try { await rpc('kb_photo_del', { code: famCode, photo_id: id }); } catch {}
+  del('photos', id);
+  try { const key = photoKey(id); if (window.caches && key) (await caches.open('kb-photos')).delete(key); } catch {}
+}
+async function fillThumbs() {
+  for (const img of document.querySelectorAll('img[data-photo]')) { if (img.src) continue; try { const u = await photoURL(img.dataset.photo); if (u) img.src = u; } catch {} }
+}
+
+/* Photo screensaver on the wall display */
+let saverT = null, saverOrder = [], saverIdx = 0;
+const saverOn = () => !$('#saver').hidden;
+async function showSaver() {
+  const ids = all('photos').map(p => p.id); if (!ids.length) return;
+  saverOrder = ids.sort(() => Math.random() - 0.5); saverIdx = 0;
+  const sv = $('#saver'); sv.hidden = false; sv.innerHTML = `<img alt="" class="a"><img alt="" class="b"><div class="saver-info"><div class="big tn" id="saverClock"></div><div id="saverSub"></div></div>`;
+  await nextSlide(); clearInterval(saverT); saverT = setInterval(nextSlide, 12000);
+}
+async function nextSlide() {
+  const sv = $('#saver'); if (sv.hidden) return;
+  const n = new Date(), nowM = n.getHours() * 60 + n.getMinutes();
+  const ck = $('#saverClock'); if (ck) ck.textContent = fmtT(fromMin(nowM));
+  const nx = allEventsOn(today()).find(e => !e.allDay && toMin(e.start) >= nowM);
+  const sub = $('#saverSub'); if (sub) sub.textContent = `${DOWL[n.getDay()]}, ${MON[n.getMonth()]} ${n.getDate()}${wxData ? ` · ${wxIcon(wxData.now.code, wxData.now.day)} ${wxData.now.t}°` : ''}${nx ? ` · Next: ${nx.title} at ${fmtT(nx.start)}` : ''}`;
+  const id = saverOrder[saverIdx++ % saverOrder.length];
+  try {
+    const u = await photoURL(id); if (!u || sv.hidden) return;
+    const imgs = sv.querySelectorAll('img'), cur = sv.querySelector('img.show'), nxt = cur === imgs[0] ? imgs[1] : imgs[0];
+    nxt.onload = () => { nxt.classList.add('show'); if (cur) cur.classList.remove('show'); };
+    nxt.src = u;
+  } catch {}
+}
+function hideSaver() { const sv = $('#saver'); if (sv.hidden) return; sv.hidden = true; sv.innerHTML = ''; clearInterval(saverT); }
 
 /* ---------- celebrations ----------
    One entry point, celebrate(ev). Events are queued and played one at a time, and are also
@@ -1359,6 +1711,7 @@ function celebrate(ev) {
   const look = personLook(ev.personId, ev.name);
   announce(celText(ev, look.name));
   if (celLevel() === 'off' || nightActive()) { Cel.log.push({ type: ev.type, skipped: celLevel() === 'off' ? 'off' : 'night' }); return; }
+  hideSaver();
   Cel.q.push(ev); if (Cel.q.length > 8) Cel.q.splice(0, Cel.q.length - 8);
   if (!Cel.busy) runNext();
 }
@@ -1433,7 +1786,8 @@ document.addEventListener('click', async ev => {
   const el = ev.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act, id = el.dataset.id;
   switch (a) {
-    case 'tab': ui.tab = id; lsSet('kb-tab', id); $('#main').scrollTop = 0; render(); break;
+    case 'tab': if (id === 'settings' && ui.tab !== 'settings' && !isParent()) { pinPad('open Family settings', () => { ui.tab = 'settings'; lsSet('kb-tab', 'settings'); render(); }); break; }
+      ui.tab = id; lsSet('kb-tab', id); $('#main').scrollTop = 0; render(); break;
     case 'close': closeSheet(); break;
     case 'filter': ui.filter.has(id) ? ui.filter.delete(id) : ui.filter.add(id); render(); break;
     case 'cal-mode': ui.calMode = id; lsSet('kb-cal', id); render(); break;
@@ -1442,17 +1796,29 @@ document.addEventListener('click', async ev => {
       const s = a === 'cal-prev' ? -1 : 1, m = ui.calMode;
       ui.cursor = m === 'month' ? addMonths(ui.cursor, s) : addDays(ui.cursor, s * (m === 'day' ? 1 : m === 'agenda' ? 7 : isWide() ? 7 : 3)); render(); break; }
     case 'month-day': ui.cursor = id; ui.calMode = 'day'; render(); break;
-    case 'ev': ev.stopPropagation(); editEvent(id); break;
+    case 'ev': ev.stopPropagation(); editEvent(id, {}, el.dataset.day || null); break;
     case 'slot': {
       if (ev.target.closest('.ev')) break;
       const r = el.getBoundingClientRect(), hourPx = r.height / (H1 - H0);
       const m = Math.max(H0 * 60, Math.min((H1 - 1) * 60, H0 * 60 + Math.floor((ev.clientY - r.top) / hourPx * 2) * 30));
       editEvent(null, { date: id, start: fromMin(m), end: fromMin(m + 60) }); break; }
-    case 'fab': ({ today: () => editEvent(null), calendar: () => editEvent(null), chores: () => editChore(null), rewards: () => editReward(null), lists: () => all('lists').length ? $('#itemText')?.focus() : editList(null), meals: () => editMeal(`${today()}_dinner`) })[ui.tab]?.(); break;
-    case 'member-new': editMember(null); break;
-    case 'member-edit': editMember(id); break;
-    case 'chore-new': editChore(null); break;
-    case 'chore-edit': editChore(id); break;
+    case 'fab': ({ today: () => editEvent(null), calendar: () => editEvent(null), chores: () => withParent('add chores', () => editChore(null)), rewards: () => withParent('add rewards', () => editReward(null)), lists: () => all('lists').length ? $('#itemText')?.focus() : editList(null), meals: () => editMeal(`${today()}_dinner`) })[ui.tab]?.(); break;
+    case 'member-new': withParent('add a person', () => editMember(null)); break;
+    case 'member-edit': withParent('edit people', () => editMember(id)); break;
+    case 'chore-new': withParent('add chores', () => editChore(null)); break;
+    case 'chore-edit': withParent('edit chores', () => editChore(id)); break;
+    case 'adjust': withParent('change stars', () => adjustStars(id)); break;
+    case 'pin-set': setPinSheet(); break;
+    case 'pin-remove': if (el.classList.contains('armed')) { updFamily({ pin: null }); lsSet('kb-parent-device', false); toast('Parent PIN removed'); } else { el.classList.add('armed'); el.textContent = 'Tap again to remove the PIN'; } break;
+    case 'pin-lock': parentUntil = 0; lsSet('kb-parent-device', false); ui.tab = 'today'; render(); toast('Locked'); break;
+    case 'weather': weatherSheet(); break;
+    case 'feed-new': feedSheet(null); break;
+    case 'feed-edit': feedSheet(id); break;
+    case 'feeds-sync': toast('Syncing calendars…'); await syncFeeds(true); toast('Calendars synced'); render(); break;
+    case 'photo-add': $('#photoFile').click(); break;
+    case 'photo-del': if (el.classList.contains('armed')) deletePhoto(id); else { el.classList.add('armed'); el.textContent = 'Tap again'; } break;
+    case 'saver-test': showSaver(); break;
+    case 'saver': hideSaver(); break;
     case 'chore-toggle': {
       const day = el.dataset.day || ui.choreDay, c = get('chores', id), k = doneKey(day, id);
       if (!c) break;
@@ -1465,11 +1831,11 @@ document.addEventListener('click', async ev => {
     case 'chore-prev': ui.choreDay = addDays(ui.choreDay, -1); render(); break;
     case 'chore-next': ui.choreDay = addDays(ui.choreDay, 1); render(); break;
     case 'chore-today': ui.choreDay = today(); render(); break;
-    case 'reward-new': editReward(null); break;
-    case 'reward-edit': editReward(id); break;
+    case 'reward-new': withParent('add rewards', () => editReward(null)); break;
+    case 'reward-edit': withParent('edit rewards', () => editReward(id)); break;
     case 'redeem': redeem(id, el.dataset.m); break;
     case 'list-new': editList(null); break;
-    case 'list-edit': editList(id); break;
+    case 'list-edit': withParent('rename or delete lists', () => editList(id)); break;
     case 'list-quick': { const nid = uid(); ui.listId = nid; put('lists', nid, { name: id, order: Date.now() }); break; }
     case 'list-pick': ui.listId = id; lsSet('kb-list', id); render(); break;
     case 'item-toggle': { const i = get('items', id); const { id: _, ...d } = i; put('items', id, { ...d, done: !i.done }); break; }
@@ -1482,7 +1848,7 @@ document.addEventListener('click', async ev => {
     case 'ics': importICS(); break;
     case 'sample-load': loadSample(); break;
     case 'sample-clear': if (el.classList.contains('armed')) clearSample(); else { el.classList.add('armed'); el.textContent = 'Tap again to remove'; } break;
-    case 'sleep': renderSleep(); $('#sleep').hidden = false; celStop(); break;
+    case 'sleep': hideSaver(); renderSleep(); $('#sleep').hidden = false; celStop(); break;
     case 'wake': $('#sleep').hidden = true; $('#sleep').classList.remove('night'); break;
     case 'fullscreen': try { await (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()); } catch { toast('Full screen is not available here. On iPad, add Kinboard to the Home Screen instead.'); } break;
     case 'cel-preview': previewCelebration(id); break;
@@ -1519,7 +1885,7 @@ document.addEventListener('submit', ev => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#scrim').hidden) closeSheet(); else $('#sleep').hidden = true; } });
 /* ---------- wall display mode ---------- */
-const wall = { on: lsGet('kb-wall', false), idleMin: lsGet('kb-idle', 2), nightOn: lsGet('kb-night-on', false), from: lsGet('kb-night-from', '21:30'), to: lsGet('kb-night-to', '06:30') };
+const wall = { saverMin: lsGet('kb-saver', 0), on: lsGet('kb-wall', false), idleMin: lsGet('kb-idle', 2), nightOn: lsGet('kb-night-on', false), from: lsGet('kb-night-from', '21:30'), to: lsGet('kb-night-to', '06:30') };
 let lastTouch = Date.now(), lastDay = today(), lastMin = -1;
 const loadedAt = Date.now();
 ['pointerdown', 'keydown', 'wheel'].forEach(t => addEventListener(t, () => { lastTouch = Date.now(); }, { passive: true, capture: true }));
@@ -1538,10 +1904,11 @@ function wallTick() {
     lastDay = today(); render();
   }
   if (wall.on && idle > wall.idleMin * 60000 && (ui.tab !== 'today' || ui.filter.size || !$('#scrim').hidden)) {
-    closeSheet(); ui.tab = 'today'; ui.cursor = today(); ui.choreDay = today(); ui.mealWeek = mondayOf(today()); ui.filter.clear(); $('#main').scrollTop = 0; render();
+    closeSheet(); parentUntil = 0; ui.tab = 'today'; ui.cursor = today(); ui.choreDay = today(); ui.mealWeek = mondayOf(today()); ui.filter.clear(); $('#main').scrollTop = 0; render();
   } else if (ui.tab === 'today' && $('#scrim').hidden && n.getMinutes() !== lastMin) { lastMin = n.getMinutes(); render(); }
+  if (wall.on && wall.saverMin && idle > wall.saverMin * 60000 && !saverOn() && sl.hidden && !nightActive() && S.photos.size && mode === 'cloud') showSaver();
   if (wall.on && wall.nightOn) {
-    if (inNight() && idle > 60000 && sl.hidden) { renderSleep(); sl.classList.add('night'); sl.hidden = false; celStop(); }
+    if (inNight() && idle > 60000 && sl.hidden) { renderSleep(); sl.classList.add('night'); sl.hidden = false; celStop(); hideSaver(); }
     else if (!inNight() && sl.classList.contains('night') && !sl.hidden) { sl.hidden = true; sl.classList.remove('night'); }
   }
   if (wall.on && !Native && n.getHours() === 3 && n.getMinutes() >= 30 && n.getMinutes() < 40 && Date.now() - loadedAt > 3600000 && navigator.onLine) location.reload();
@@ -1549,6 +1916,7 @@ function wallTick() {
 setInterval(wallTick, 15000);
 document.addEventListener('visibilitychange', keepAwake);
 document.addEventListener('change', e => {
+  if (e.target.id === 'photoFile' && e.target.files.length) { uploadPhotos(e.target.files).then(() => { e.target.value = ''; }); return; }
   const ck = e.target.dataset && e.target.dataset.cel;
   if (ck === 'level') { lsSet('kb-cel-level', e.target.value); if (e.target.value === 'off') celStop(); }
   if (ck === 'sound') { lsSet('kb-cel-sound', e.target.checked); if (e.target.checked) chime('chore'); }
@@ -1556,6 +1924,7 @@ document.addEventListener('change', e => {
   const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
   if (k === 'on') { wall.on = v; lsSet('kb-wall', v); applyWall(); toast(v ? 'Wall display mode on' : 'Wall display mode off'); }
   if (k === 'idle') { wall.idleMin = Number(v); lsSet('kb-idle', wall.idleMin); }
+  if (k === 'saver') { wall.saverMin = Number(v); lsSet('kb-saver', wall.saverMin); }
   if (k === 'night') { wall.nightOn = v; lsSet('kb-night-on', v); }
   if (k === 'from' && v) { wall.from = v; lsSet('kb-night-from', v); }
   if (k === 'to' && v) { wall.to = v; lsSet('kb-night-to', v); }
@@ -1565,6 +1934,7 @@ addEventListener('resize', () => { if (isWide() !== lastWide) { lastWide = isWid
 
 const th = lsGet('kb-theme', ''); if (th) document.documentElement.dataset.theme = th;
 setInterval(tickClock, 20000);
+setTimeout(() => refreshWeather(false), 1500);
 applyWall();
 if (!Native && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 initStore();
