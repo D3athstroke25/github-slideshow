@@ -1,0 +1,10 @@
+{
+  "name": "kinboard-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node celebrations.test.mjs" },
+  "dependencies": {
+    "@sparticuz/chromium": "^140.0.0",
+    "puppeteer-core": "^24.0.0"
+  }
+}
