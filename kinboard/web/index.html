@@ -1,0 +1,1944 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Kinboard</title>
+<meta name="description" content="Family calendar, chores, rewards, lists and meal planner.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kinboard">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#EDF1EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1614" media="(prefers-color-scheme: dark)">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<script src="config.js"></script>
+<style>
+/* Layout: a wall-calendar "board" — side rail on tablets/desktop, bottom tab bar on phones; header carries family name, clock and member chips. */
+:root{
+  --bg:#EDF1EE; --surface:#FFFFFF; --surface-2:#F5F8F6; --ink:#17251F; --muted:#5B6B65; --line:#D9E1DC;
+  --accent:#1E6B5C; --accent-ink:#FFFFFF; --accent-soft:#D3E8E1; --now:#D9482F; --star:#C98A00;
+  --shadow:0 1px 2px rgba(20,40,34,.06),0 6px 24px rgba(20,40,34,.08);
+  --rose-bg:#F8D5E0; --rose-ink:#7A2846; --lime-bg:#D7EBA3; --lime-ink:#3B5210;
+  --sky-bg:#CDE7EF; --sky-ink:#1C5465; --lilac-bg:#DFD5F6; --lilac-ink:#4A347E;
+  --peach-bg:#FADEC6; --peach-ink:#7A3E12; --butter-bg:#F5E8A8; --butter-ink:#665010;
+  --mint-bg:#C8EBDC; --mint-ink:#1E5D46; --slate-bg:#DAE0E7; --slate-ink:#33424F;
+  --f-display:"Young Serif",Georgia,"Times New Roman",serif;
+  --f-body:"Figtree",-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r:14px; --hour:50px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1614; --surface:#17201D; --surface-2:#1C2724; --ink:#E6EEEA; --muted:#97A8A1; --line:#2A3833;
+  --accent:#5CC2A8; --accent-ink:#0C1513; --accent-soft:#1F3B34; --now:#FF7A63; --star:#F2C14E;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 24px rgba(0,0,0,.35);
+  --rose-bg:#4A2433; --rose-ink:#F8C9D9; --lime-bg:#33421A; --lime-ink:#D5EBA0;
+  --sky-bg:#1D3E48; --sky-ink:#C5E6EF; --lilac-bg:#352B54; --lilac-ink:#DCD1F7;
+  --peach-bg:#4C3020; --peach-ink:#F9D9BF; --butter-bg:#463D17; --butter-ink:#F3E6A4;
+  --mint-bg:#1C4234; --mint-ink:#C4EBDA; --slate-bg:#2C3640; --slate-ink:#D6DEE6;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1614; --surface:#17201D; --surface-2:#1C2724; --ink:#E6EEEA; --muted:#97A8A1; --line:#2A3833;
+  --accent:#5CC2A8; --accent-ink:#0C1513; --accent-soft:#1F3B34; --now:#FF7A63; --star:#F2C14E;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 24px rgba(0,0,0,.35);
+  --rose-bg:#4A2433; --rose-ink:#F8C9D9; --lime-bg:#33421A; --lime-ink:#D5EBA0;
+  --sky-bg:#1D3E48; --sky-ink:#C5E6EF; --lilac-bg:#352B54; --lilac-ink:#DCD1F7;
+  --peach-bg:#4C3020; --peach-ink:#F9D9BF; --butter-bg:#463D17; --butter-ink:#F3E6A4;
+  --mint-bg:#1C4234; --mint-ink:#C4EBDA; --slate-bg:#2C3640; --slate-ink:#D6DEE6;
+  color-scheme:dark}
+
+html,body{height:100%;margin:0}
+html{color-scheme:light}
+body{overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+img{max-width:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.4;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+.tn{font-variant-numeric:tabular-nums}
+.m{--mb:var(--slate-bg);--mi:var(--slate-ink)}
+.c-rose{--mb:var(--rose-bg);--mi:var(--rose-ink)} .c-lime{--mb:var(--lime-bg);--mi:var(--lime-ink)}
+.c-sky{--mb:var(--sky-bg);--mi:var(--sky-ink)} .c-lilac{--mb:var(--lilac-bg);--mi:var(--lilac-ink)}
+.c-peach{--mb:var(--peach-bg);--mi:var(--peach-ink)} .c-butter{--mb:var(--butter-bg);--mi:var(--butter-ink)}
+.c-mint{--mb:var(--mint-bg);--mi:var(--mint-ink)} .c-slate{--mb:var(--slate-bg);--mi:var(--slate-ink)}
+
+/* shell */
+.app{display:grid;grid-template-columns:1fr;height:100%}
+main{min-width:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(7,1fr);
+  background:var(--surface);border-top:1px solid var(--line);
+  padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
+.tab{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:12px;color:var(--muted);font-size:11px;font-weight:600}
+.tab svg{width:22px;height:22px}
+.tab[aria-current="page"]{color:var(--accent);background:var(--accent-soft)}
+.tab.sleep{display:none}
+.brand{display:none}
+@media (min-width:900px){
+  .app{grid-template-columns:92px 1fr}
+  nav.tabs{position:static;display:flex;flex-direction:column;gap:6px;border-top:0;border-right:1px solid var(--line);padding:calc(16px + env(safe-area-inset-top,0px)) 10px calc(16px + env(safe-area-inset-bottom,0px));padding-left:max(10px,env(safe-area-inset-left,0px));overflow-y:auto}
+  .tab{padding:10px 2px;font-size:12px}
+  .tab.sleep{display:flex;margin-top:auto}
+  .brand{display:grid;place-items:center;width:44px;height:44px;margin:0 auto 10px;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-family:var(--f-display);font-size:22px}
+  main{padding-bottom:32px}
+}
+
+/* header */
+header.top{position:sticky;top:0;z-index:10;background:var(--bg);padding-top:calc(14px + env(safe-area-inset-top,0px));padding-bottom:10px;border-bottom:1px solid var(--line)}
+.hrow{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.family{font-family:var(--f-display);font-size:clamp(22px,4.5vw,32px);line-height:1.1;margin:0;font-weight:400;text-wrap:balance}
+.clock{font-family:var(--f-display);font-size:clamp(18px,3.5vw,26px)}
+.hdate{color:var(--muted);font-weight:500}
+.sync{margin-left:auto;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block}
+.sync.local i{background:var(--star)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:5px 14px 5px 5px;border-radius:999px;background:var(--mb);color:var(--mi);font-weight:600;font-size:14px;min-width:120px;transition:opacity .15s}
+.chip .cnt{margin-left:auto;font-weight:500;opacity:.85}
+.chips.filtering .chip:not(.on){opacity:.4}
+.chip.add{background:var(--surface);color:var(--muted);border:1px dashed var(--line);min-width:0;padding:5px 14px}
+.av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--mi);color:var(--mb);font-size:13px;font-weight:700;flex:0 0 auto}
+.av.sm{width:20px;height:20px;font-size:10px;border:1.5px solid var(--surface)}
+.avs{display:flex}.avs .av+.av{margin-left:-6px}
+
+/* toolbar */
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-block:14px 10px}
+.toolbar h2{font-family:var(--f-display);font-weight:400;font-size:20px;margin:0 auto 0 6px;white-space:nowrap}
+.ibtn{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--surface);border:1px solid var(--line)}
+.ibtn svg{width:18px;height:18px}
+.btn{height:36px;padding:0 14px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:6px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--now);border-color:var(--now)}
+.btn.danger.armed{background:var(--now);color:var(--surface)}
+.seg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{padding:5px 12px;border-radius:7px;font-weight:600;font-size:13px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+
+/* time grid */
+.tg{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+.tg-row{display:grid;grid-template-columns:48px repeat(var(--cols),minmax(0,1fr))}
+.tg-head{border-bottom:1px solid var(--line)}
+.dh{padding:10px 8px 8px;font-family:var(--f-display);font-size:18px;border-left:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh small{font-family:var(--f-body);font-size:12px;color:var(--muted);display:block;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.dh.today{color:var(--accent)}
+.dh.today small{color:var(--accent)}
+.tg-all{border-bottom:1px solid var(--line);min-height:8px}
+.tg-all > div{border-left:1px solid var(--line);padding:4px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.tg-all .lab{border:0;font-size:10px;color:var(--muted);text-align:right;padding-right:6px;justify-content:center}
+.pill{display:block;width:100%;text-align:left;padding:3px 8px;border-radius:7px;background:var(--mb);color:var(--mi);font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg-body{position:relative}
+.hours{position:relative}
+.hours span{position:absolute;right:6px;transform:translateY(-50%);font-size:11px;color:var(--muted)}
+.dcol{position:relative;border-left:1px solid var(--line);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--hour) - 1px),var(--line) calc(var(--hour) - 1px),var(--line) var(--hour));cursor:copy}
+.dcol.today{background-color:var(--surface-2)}
+.ev{position:absolute;padding:4px 7px;border-radius:9px;background:var(--evbg,var(--mb));color:var(--mi);overflow:hidden;text-align:left;font-size:12.5px;line-height:1.25;border:1.5px solid var(--surface);cursor:pointer;display:flex;flex-direction:column;gap:1px}
+.ev b{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .t{opacity:.85;font-size:11.5px}
+.ev .avs{position:absolute;right:5px;bottom:5px}
+.nowline{position:absolute;left:0;right:0;height:2px;background:var(--now);z-index:3;pointer-events:none}
+.nowline::before{content:"";position:absolute;left:-5px;top:-4px;width:10px;height:10px;border-radius:50%;background:var(--now)}
+
+/* month */
+.mg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+.mg .wd{padding:8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line)}
+.mc{min-height:96px;padding:6px;border-top:1px solid var(--line);border-left:1px solid var(--line);display:flex;flex-direction:column;gap:3px;text-align:left;align-items:stretch;min-width:0}
+.mc:nth-child(7n+1){border-left:0}
+.mc .n{font-weight:600;font-size:13px;width:24px;height:24px;display:grid;place-items:center;border-radius:50%}
+.mc.out{color:var(--muted);background:var(--surface-2)}
+.mc.today .n{background:var(--accent);color:var(--accent-ink)}
+.mc .more{font-size:11px;color:var(--muted)}
+.mc .dots{display:none;gap:3px;flex-wrap:wrap}
+.mc .dots i{width:6px;height:6px;border-radius:50%;background:var(--mi)}
+@media (max-width:640px){.mc{min-height:58px}.mc .pill,.mc .more{display:none}.mc .dots{display:flex}}
+
+/* agenda */
+.ag{display:flex;flex-direction:column;gap:14px}
+.agday h3{margin:0 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.agday h3.today{color:var(--accent)}
+.agrow{display:grid;grid-template-columns:86px 1fr auto;gap:10px;align-items:center;width:100%;text-align:left;padding:10px 12px;border-radius:12px;background:var(--mb);color:var(--mi);margin-bottom:6px}
+.agrow .t{font-size:12.5px;font-weight:600}
+.agrow b{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* cards & lists */
+.grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);min-width:0}
+.card h3{margin:0;font-size:16px;display:flex;align-items:center;gap:10px}
+.mhead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.mhead .meta{font-size:12.5px;color:var(--muted)}
+.bar{height:6px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin:6px 0 10px}
+.bar i{display:block;height:100%;background:var(--mi);border-radius:6px;transition:width .3s}
+.chore{display:flex;align-items:center;gap:10px;padding:8px 6px;border-radius:10px;width:100%;text-align:left}
+.chore:hover{background:var(--surface-2)}
+.tick{width:28px;height:28px;border-radius:50%;border:2px solid var(--mi);display:grid;place-items:center;flex:0 0 auto;transition:background .15s}
+.tick svg{width:16px;height:16px;opacity:0}
+.chore.done .tick{background:var(--mi)}
+.chore.done .tick svg{opacity:1;color:var(--mb)}
+.chore.done .ct{text-decoration:line-through;color:var(--muted)}
+.ct{flex:1;min-width:0}
+.ct small{display:block;color:var(--muted);font-size:12px}
+.stars{color:var(--star);font-weight:700;font-size:13px;white-space:nowrap}
+.edit{color:var(--muted);padding:6px;border-radius:8px}
+.edit svg{width:16px;height:16px}
+.empty{padding:28px 18px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:var(--r)}
+.empty h3{font-family:var(--f-display);font-weight:400;color:var(--ink);font-size:22px;margin:0 0 6px}
+.empty p{margin:0 auto 14px;max-width:44ch}
+.empty .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+
+.listtabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.listtabs .btn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.additem{display:flex;gap:8px;margin:12px 0}
+.additem input{flex:1;min-width:0}
+input[type=text],input[type=date],input[type=time],input[type=number],select,textarea{font-size:16px;height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);width:100%}
+textarea{height:auto;padding:10px 12px;min-height:70px;resize:vertical}
+.item{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}
+.item .tick{--mi:var(--accent);--mb:var(--accent-ink);width:24px;height:24px}
+.item.done .tick{background:var(--accent)}.item.done .tick svg{opacity:1;color:var(--accent-ink)}
+.item.done span{text-decoration:line-through;color:var(--muted)}
+.item span{flex:1;min-width:0;overflow-wrap:anywhere}
+
+.meals{display:grid;gap:10px}
+.mealday{display:grid;grid-template-columns:110px repeat(4,minmax(0,1fr));gap:8px;align-items:stretch}
+.mealday .d{font-family:var(--f-display);font-size:17px;padding-top:6px}
+.mealday .d small{display:block;font-family:var(--f-body);font-size:12px;color:var(--muted)}
+.mealday.today .d{color:var(--accent)}
+.slot{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 10px;text-align:left;min-height:58px;min-width:0}
+.slot small{display:block;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.slot span{display:block;overflow-wrap:anywhere;font-weight:600}
+.slot.emptyslot span{color:var(--muted);font-weight:400}
+@media (max-width:700px){.mealday{grid-template-columns:repeat(2,minmax(0,1fr))}.mealday .d{grid-column:1/-1;padding-top:8px}}
+
+.bal{font-family:var(--f-display);font-size:30px;color:var(--star)}
+.reward{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.reward:last-child{border-bottom:0}
+.reward .ct b{display:block}
+.hist{font-size:13px;color:var(--muted)}
+.section-title{font-family:var(--f-display);font-weight:400;font-size:20px;margin:22px 0 10px}
+
+.settings{display:grid;gap:14px;max-width:760px}
+.field{display:grid;gap:6px;margin-bottom:12px}
+.field > span{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.pick .sw,.sw{padding:0;width:34px;height:34px;border-radius:50%;background:var(--mb);border:2px solid var(--mi)}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--mi)}
+.pick{display:flex;gap:6px;flex-wrap:wrap}
+.pick button{padding:6px 12px 6px 6px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px}
+.pick button[aria-pressed="true"]{background:var(--mb);color:var(--mi);border-color:var(--mi)}
+.pick.days button{padding:6px 11px}
+.pick.days button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.check{display:flex;align-items:center;gap:10px;font-weight:600;margin-bottom:12px}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+.note{font-size:13px;color:var(--muted)}
+
+/* fab, sheet, toast, sleep */
+.fab{position:fixed;z-index:15;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:18px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;box-shadow:var(--shadow)}
+.fab svg{width:26px;height:26px}
+@media (min-width:900px){.fab{bottom:calc(24px + env(safe-area-inset-bottom,0px));right:calc(24px + env(safe-area-inset-right,0px))}}
+.scrim{position:fixed;inset:0;z-index:40;padding-top:env(safe-area-inset-top,0px);background:rgba(10,20,17,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:560px;max-height:92%;overflow-y:auto;border-radius:20px 20px 0 0;padding:18px max(18px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));animation:up .2s ease-out}
+.sheet h2{font-family:var(--f-display);font-weight:400;font-size:22px;margin:0 0 14px}
+.sheet .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
+.sheet .actions .btn.danger{margin-right:auto}
+@media (min-width:700px){.scrim{align-items:center}.sheet{border-radius:20px}}
+@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+.toast{position:fixed;z-index:60;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px)}
+.sleepscreen{position:fixed;inset:0;z-index:80;background:#05090A;color:#DDE7E3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px}
+.sleepscreen .big{font-family:var(--f-display);font-size:clamp(64px,18vw,160px);line-height:1}
+.sleepscreen .sd{font-size:20px;opacity:.75}
+.sleepscreen .nx{margin-top:24px;font-size:16px;opacity:.6}
+.banner{margin-top:12px;padding:10px 14px;border-radius:12px;background:var(--accent-soft);font-size:14px}
+.setup{max-width:520px;margin:28px auto;display:grid;gap:14px}
+.setup .hero{font-family:var(--f-display);font-size:34px;line-height:1.1;margin:0;text-wrap:balance}
+.setup .lead{color:var(--muted);margin:0}
+.code{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:22px;letter-spacing:.08em;padding:12px 14px;border-radius:12px;background:var(--surface-2);border:1px dashed var(--line);user-select:all;-webkit-user-select:all;text-align:center}
+#joinCode{text-transform:uppercase;letter-spacing:.08em;font-family:ui-monospace,"SF Mono",Menlo,monospace}
+body.setup-mode nav.tabs,body.setup-mode header.top{display:none}
+body.setup-mode main{padding-top:env(safe-area-inset-top,0px)}
+body.setup-mode .app{grid-template-columns:1fr}
+.todayhead{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding-block:14px 12px}
+.todayhead h2{font-family:var(--f-display);font-weight:400;font-size:22px;margin:0}
+.strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.strip .trow{width:auto;margin:0}
+.today-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;align-items:start}
+.tcol h4{margin:12px 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.trow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border-radius:10px;background:var(--mb);color:var(--mi);margin-bottom:6px}
+.trow .t{font-size:12.5px;font-weight:600;white-space:nowrap;min-width:58px}
+.trow b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow.past{opacity:.45}
+.trow.now{box-shadow:0 0 0 2px var(--mi)}
+.trow.dinner{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.nowtag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--mi);color:var(--mb)}
+.alldone{margin:10px 0 0;font-weight:700;color:var(--mi)}
+body.wall{font-size:16px;--hour:max(34px,calc((100dvh - 330px) / 17))}
+body.wall .tab{font-size:13px}
+body.wall .tab svg{width:26px;height:26px}
+body.wall .chore{padding:11px 6px}
+body.wall .tick{width:32px;height:32px}
+body.wall .trow{padding:10px 12px}
+body.wall .todayhead h2{font-size:28px}
+.sleepscreen.night{background:#000;color:#8a958f}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.streak{font-weight:700}
+.fx-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:72;pointer-events:none}
+.fly-star{position:fixed;z-index:73;pointer-events:none;font-size:30px;line-height:1;color:var(--star);text-shadow:0 2px 6px rgba(0,0,0,.25)}
+.tick.spring{animation:spring .5s cubic-bezier(.3,1.7,.5,1)}
+@keyframes spring{0%{transform:scale(.55)}55%{transform:scale(1.22)}100%{transform:scale(1)}}
+.pop{display:inline-block;animation:pop .45s cubic-bezier(.3,1.7,.5,1)}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.45)}100%{transform:scale(1)}}
+.cel-glow{animation:glow 1.8s ease-out}
+@keyframes glow{0%{box-shadow:0 0 0 0 var(--mi)}15%{box-shadow:0 0 0 6px var(--mi);background:var(--mb)}100%{box-shadow:var(--shadow)}}
+.alldone.cel-in{display:inline-block;animation:alldone .7s cubic-bezier(.3,1.7,.5,1)}
+@keyframes alldone{0%{transform:scale(.3);opacity:0}100%{transform:scale(1);opacity:1}}
+.cel-banner{position:fixed;z-index:74;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);max-width:calc(100% - 32px);padding:12px 22px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:center;pointer-events:none;animation:bannerIn .45s cubic-bezier(.3,1.5,.5,1)}
+.cel-banner b{display:block;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.2}
+.cel-banner span{display:block;font-size:14px;font-weight:600;opacity:.9;margin-top:2px}
+.cel-banner.big{width:min(720px,calc(100% - 32px));padding:18px 24px}
+.cel-banner.big b{font-size:clamp(24px,4vw,40px)}
+.cel-banner.out{opacity:0;transform:translateX(-50%) translateY(-12px);transition:opacity .25s,transform .25s}
+@keyframes bannerIn{0%{transform:translateX(-50%) translateY(-30px) scale(.9);opacity:0}100%{transform:translateX(-50%) translateY(0) scale(1);opacity:1}}
+.cel-flash{position:fixed;inset:0;z-index:71;opacity:.35;pointer-events:none}
+.cel-overlay{position:fixed;inset:0;z-index:70;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:calc(24px + env(safe-area-inset-top,0px)) max(24px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(24px,env(safe-area-inset-left,0px));cursor:pointer;animation:ovIn .4s cubic-bezier(.3,1.4,.5,1)}
+.cel-overlay .who{font-size:clamp(18px,3vw,26px);font-weight:700;opacity:.9}
+.cel-overlay .what{font-family:var(--f-display);font-size:clamp(40px,9vw,96px);line-height:1.05;max-width:16ch;text-wrap:balance;overflow-wrap:anywhere;animation:whatIn .6s .1s cubic-bezier(.3,1.6,.5,1) both}
+.cel-overlay .cost{font-size:clamp(22px,4vw,34px);font-weight:700;text-decoration:line-through;text-decoration-thickness:3px;opacity:.85}
+.cel-overlay .hint{margin-top:18px;font-size:14px;font-weight:600;opacity:.75}
+.cel-overlay.out{opacity:0;transition:opacity .25s}
+@keyframes ovIn{0%{opacity:0;transform:scale(1.04)}100%{opacity:1;transform:none}}
+@keyframes whatIn{0%{transform:scale(.4);opacity:0}100%{transform:none;opacity:1}}
+.wx{font-weight:600;color:var(--muted)}
+.wxday{font-weight:600;font-size:14px;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
+.pindots{display:flex;gap:12px;justify-content:center;margin:6px 0 14px;min-height:16px}
+.pindots i{width:14px;height:14px;border-radius:50%;border:2px solid var(--accent)}
+.pindots i.on{background:var(--accent)}
+.pinpad{display:grid;grid-template-columns:repeat(3,72px);gap:12px;justify-content:center;margin-bottom:14px}
+.pinpad button{height:72px;border-radius:50%;background:var(--surface-2);border:1px solid var(--line);font-size:26px;font-weight:600}
+.pinpad button.ok{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.pinpad.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:10px}
+.thumbs figure{margin:0;position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--surface-2);max-width:100%}
+.thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.thumbs .edit{position:absolute;top:4px;right:4px;background:var(--surface);border-radius:8px;font-size:12px;padding:4px 6px}
+.saver{position:fixed;inset:0;z-index:78;background:#000;cursor:pointer}
+.saver img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 1.5s}
+.saver img.show{opacity:1}
+.saver-info{position:absolute;left:max(28px,env(safe-area-inset-left,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7)}
+.saver-info .big{font-family:var(--f-display);font-size:clamp(40px,7vw,84px);line-height:1}
+.saver-info div:last-child{font-size:clamp(15px,2vw,22px);font-weight:600;margin-top:6px}
+@media (prefers-reduced-motion:reduce){.fx-canvas,.fly-star{display:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <nav class="tabs" aria-label="Sections">
+    <div class="brand" aria-hidden="true">K</div>
+  </nav>
+  <main id="main">
+    <header class="top wrap" id="top"></header>
+    <div class="wrap" id="view"><div class="empty" style="margin-top:20px"><h3>Loading your family board</h3><p>Calendar, chores, lists and meals appear here in a moment.</p></div></div>
+  </main>
+</div>
+<button class="fab" id="fab" aria-label="Add" data-act="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+<div class="scrim" id="scrim" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast" hidden></div>
+<div id="announce" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+<div class="sleepscreen" id="sleep" hidden data-act="wake"></div>
+<div class="saver" id="saver" hidden data-act="saver"></div>
+
+<script>
+(() => {
+'use strict';
+/* ---------- helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const ds = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const pd = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+const addDays = (s, n) => { const d = pd(s); d.setDate(d.getDate()+n); return ds(d); };
+const addMonths = (s, n) => { const d = pd(s); d.setDate(1); d.setMonth(d.getMonth()+n); return ds(d); };
+const today = () => ds(new Date());
+const toMin = t => { if (!t) return null; const [h,m] = t.split(':').map(Number); return h*60+m; };
+const fromMin = m => `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`;
+const fmtT = t => { const [h,m] = t.split(':').map(Number); const hh = h%12 || 12; return (m ? `${hh}:${pad(m)}` : `${hh}`) + (h < 12 ? ' AM' : ' PM'); };
+const fmtRange = e => e.allDay ? 'All day' : `${fmtT(e.start)} – ${fmtT(e.end || e.start)}`;
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DOWL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const mondayOf = s => { const d = pd(s); const k = (d.getDay()+6)%7; return addDays(s, -k); };
+const COLORS = ['rose','lime','sky','lilac','peach','butter','mint','slate'];
+const isWide = () => matchMedia('(min-width: 900px)').matches;
+const lsGet = (k, f) => { try { const v = localStorage.getItem(k); return v == null ? f : JSON.parse(v); } catch { return f; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+const I = {
+  cal:'<path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  chores:'<path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>',
+  star:'<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+  list:'<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
+  meal:'<path d="M7 3v8a2 2 0 0 0 2 2v8M11 3v8M7 7h4M17 21V3c-2 0-3 3-3 7h3"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  left:'<path d="M15 18l-6-6 6-6"/>', right:'<path d="M9 18l6-6-6-6"/>',
+  check:'<path d="M5 12l5 5L20 7"/>', pen:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+};
+const svg = (k, sw = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[k]}</svg>`;
+
+/* ---------- store: local cache + Supabase family sync (offline-first) ---------- */
+const COLS = ['members','events','chores','completions','lists','items','meals','rewards','redemptions','settings','feeds','photos'];
+const S = {}; COLS.forEach(c => S[c] = new Map());
+const CFG = window.KB_CONFIG || {};
+let mode = 'loading', canWrite = true, syncState = 'ok';
+let famCode = lsGet('kb-code', null), rev = lsGet('kb-rev', 0), outbox = lsGet('kb-outbox', []);
+const LSKEY = 'kinboard-data-v1';
+const all = c => [...S[c].entries()].map(([id, d]) => ({ id, ...d }));
+const get = (c, id) => { const d = S[c].get(id); return d ? { id, ...d } : null; };
+const normCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const fmtCode = s => normCode(s).replace(/(.{4})(?=.)/g, '$1-');
+
+function saveLocal() { const o = {}; COLS.forEach(c => o[c] = Object.fromEntries(S[c])); lsSet(LSKEY, o); lsSet('kb-rev', rev); lsSet('kb-outbox', outbox); }
+function loadLocal() { const o = lsGet(LSKEY, {}); COLS.forEach(c => S[c] = new Map(Object.entries(o[c] || {}))); }
+function wipeLocal() { COLS.forEach(c => S[c] = new Map()); rev = 0; outbox = []; saveLocal(); }
+
+async function rpc(name, body) {
+  if (!CFG.url || !CFG.key) throw { message: 'not_configured' };
+  const r = await fetch(`${CFG.url}/rest/v1/rpc/${name}`, { method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw { status: r.status, message: (j && j.message) || `HTTP ${r.status}` };
+  return j;
+}
+function setSync(s) { if (s !== syncState) { syncState = s; renderTop(); } }
+
+let pulling = null;
+async function pull() {
+  if (mode !== 'cloud') return;
+  if (pulling) return pulling;
+  pulling = (async () => {
+    try {
+      const rows = await rpc('kb_pull', { code: famCode, since: rev });
+      let changed = false;
+      for (const r of rows) {
+        if (!S[r.col]) continue;
+        // a local edit waiting in the outbox wins over the server copy until it is pushed
+        if (outbox.some(o => o.col === r.col && o.id === r.id)) { rev = Math.max(rev, r.rev); continue; }
+        if (r.deleted) S[r.col].delete(r.id); else S[r.col].set(r.id, r.data);
+        rev = Math.max(rev, r.rev); changed = true;
+      }
+      saveLocal();
+      if (changed) queueRender();
+      setSync(outbox.length ? 'pending' : 'ok');
+      if (rows.length >= 5000) setTimeout(pull, 50);
+    } catch (e) {
+      if (/family_not_found/.test(e.message || '')) { toast('This family no longer exists. Create or join another.'); leaveFamily(); }
+      else setSync('offline');
+    } finally { pulling = null; }
+  })();
+  return pulling;
+}
+let pushT = null, pushing = false;
+function schedulePush(ms = 250) { clearTimeout(pushT); pushT = setTimeout(push, ms); }
+async function push() {
+  if (mode !== 'cloud' || pushing || !outbox.length) return;
+  pushing = true;
+  const batch = outbox.slice(0, 200);
+  try {
+    await rpc('kb_put_many', { code: famCode, rows: batch });
+    outbox = outbox.filter(o => !batch.includes(o)); saveLocal();
+    live.ping();
+    pushing = false;
+    if (outbox.length) return schedulePush(50);
+    pull();
+  } catch (e) {
+    pushing = false;
+    if (/bad_|too_many|family_full/.test(e.message || '')) { outbox = outbox.filter(o => !batch.includes(o)); saveLocal(); toast('Some changes could not be saved.'); }
+    else { setSync('offline'); schedulePush(8000); }
+  }
+}
+function enqueue(col, id, data) {
+  outbox = outbox.filter(o => !(o.col === col && o.id === id));
+  outbox.push(data === null ? { col, id, deleted: true } : { col, id, data });
+}
+
+/* Realtime "something changed" pings over Supabase Realtime broadcast (raw Phoenix socket, no SDK). */
+const live = (() => {
+  let ws = null, topic = '', ref = 0, hb = null, retry = 1000;
+  async function topicFor(code) {
+    const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('kinboard:' + normCode(code)));
+    return 'realtime:kb-' + [...new Uint8Array(h)].slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ ...o, ref: String(++ref) })); };
+  async function connect() {
+    stop();
+    if (mode !== 'cloud' || !CFG.url) return;
+    topic = await topicFor(famCode);
+    try { ws = new WebSocket(CFG.url.replace(/^http/, 'ws') + `/realtime/v1/websocket?apikey=${encodeURIComponent(CFG.key)}&vsn=1.0.0`); } catch { return; }
+    ws.onopen = () => {
+      retry = 1000;
+      send({ topic, event: 'phx_join', payload: { config: { broadcast: { self: false, ack: false }, presence: { key: '' }, private: false } } });
+      hb = setInterval(() => send({ topic: 'phoenix', event: 'heartbeat', payload: {} }), 25000);
+    };
+    ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.event !== 'broadcast') return; const p = m.payload || {}; if (p.event === 'celebrate') onRemoteCelebrate(p.payload); else pull(); } catch {} };
+    ws.onclose = () => { clearInterval(hb); hb = null; if (mode === 'cloud') setTimeout(connect, retry = Math.min(retry * 2, 30000)); };
+  }
+  function stop() { clearInterval(hb); hb = null; if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; } }
+  return { connect, stop, ping: () => send({ topic, event: 'broadcast', payload: { type: 'broadcast', event: 'changed', payload: {} } }),
+    send: (event, payload) => send({ topic, event: 'broadcast', payload: { type: 'broadcast', event, payload } }) };
+})();
+
+function startCloud() {
+  mode = 'cloud'; loadLocal(); render();
+  live.connect(); pull().then(() => setTimeout(() => syncFeeds(false), 1500)); schedulePush(0);
+}
+function initStore() {
+  if (famCode) return startCloud();
+  if (lsGet('kb-localonly', false)) { mode = 'local'; loadLocal(); return render(); }
+  mode = 'setup'; render();
+  // Opening an invite link (…#join-CODE) joins straight away: handy on a wall screen with no keyboard.
+  const inv = normCode((location.hash.match(/join-([A-Za-z0-9-]+)/) || [])[1] || '');
+  if (inv.length === 16) joinFamily(inv, { disabled: false });
+}
+async function createFamily(btn) {
+  btn.disabled = true;
+  try {
+    const code = await rpc('kb_create_family', {});
+    const hadLocal = mode === 'local';
+    famCode = normCode(code); lsSet('kb-code', famCode); lsSet('kb-localonly', false);
+    if (!hadLocal) wipeLocal();
+    else { COLS.forEach(c => S[c].forEach((d, id) => enqueue(c, id, d))); rev = 0; saveLocal(); }
+    startCloud(); ui.tab = 'settings'; render(); toast('Family created. Share the code with your family.');
+  } catch { btn.disabled = false; toast('Could not reach the server. Check your connection and try again.'); }
+}
+async function joinFamily(raw, btn) {
+  const code = normCode(raw);
+  if (code.length !== 16) { toast('Family codes have 16 letters and numbers.'); return; }
+  btn.disabled = true;
+  try {
+    await rpc('kb_check', { code });
+    famCode = code; lsSet('kb-code', famCode); lsSet('kb-localonly', false); wipeLocal();
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    ui.tab = 'calendar'; startCloud(); toast('Joined. Loading your family board…');
+  } catch (e) {
+    btn.disabled = false;
+    toast(/family_not_found/.test(e.message || '') ? 'No family has that code. Check it and try again.' : 'Could not reach the server. Check your connection and try again.');
+  }
+}
+function leaveFamily() {
+  live.stop(); famCode = null; lsSet('kb-code', null); wipeLocal(); mode = 'setup'; ui.tab = 'calendar'; render();
+}
+async function deleteFamily() {
+  try { await rpc('kb_delete_family', { code: famCode }); leaveFamily(); toast('Family and all its data deleted.'); }
+  catch { toast('Could not reach the server. Try again when online.'); }
+}
+
+function onWriteError() { toast('Could not save. Check your connection and try again.'); }
+async function put(c, id, d) {
+  S[c].set(id, d); queueRender();
+  if (mode === 'cloud') { enqueue(c, id, d); setSync('pending'); schedulePush(); }
+  saveLocal(); return true;
+}
+async function del(c, id) {
+  S[c].delete(id); queueRender();
+  if (mode === 'cloud') { enqueue(c, id, null); setSync('pending'); schedulePush(); }
+  saveLocal();
+}
+async function putMany(rows) {
+  rows.forEach(([c, id, d]) => { S[c].set(id, d); if (mode === 'cloud') enqueue(c, id, d); });
+  saveLocal(); queueRender();
+  if (mode === 'cloud') { setSync('pending'); schedulePush(0); }
+  return rows.length;
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { pull(); schedulePush(0); } });
+addEventListener('online', () => { pull(); schedulePush(0); });
+setInterval(() => { if (document.visibilityState === 'visible') pull(); }, 30000);
+
+/* ---------- native app extras (Capacitor): event reminders ---------- */
+const Native = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() ? window.Capacitor : null;
+let remT = null;
+function scheduleReminders() {
+  const LN = Native && Native.Plugins && Native.Plugins.LocalNotifications;
+  if (!LN || !lsGet('kb-remind', false)) return;
+  clearTimeout(remT);
+  remT = setTimeout(async () => {
+    try {
+      const pend = await LN.getPending();
+      if (pend.notifications.length) await LN.cancel({ notifications: pend.notifications.map(n => ({ id: n.id })) });
+      const now = Date.now(), lead = (lsGet('kb-remind-min', 15)) * 60000, list = [];
+      for (let i = 0; i < 8 && list.length < 60; i++) {
+        const d = addDays(today(), i);
+        for (const e of eventsOn(d)) {
+          if (e.allDay) continue;
+          const [y, m, dd] = d.split('-').map(Number), [h, mi] = e.start.split(':').map(Number);
+          const at = new Date(y, m - 1, dd, h, mi).getTime() - lead;
+          if (at > now) list.push({ id: (parseInt(hash(e.id + d), 36) % 2147483000) + 1, title: e.title, body: `${fmtT(e.start)} · ${(e.memberIds || []).map(x => (member(x) || {}).name).filter(Boolean).join(', ') || 'Family'}`, schedule: { at: new Date(at) } });
+        }
+      }
+      if (list.length) await LN.schedule({ notifications: list.slice(0, 60) });
+    } catch {}
+  }, 1500);
+}
+async function enableReminders() {
+  const LN = Native && Native.Plugins && Native.Plugins.LocalNotifications; if (!LN) return;
+  try {
+    const p = await LN.requestPermissions();
+    if (p.display !== 'granted') { toast('Turn on notifications for Kinboard in iPhone Settings.'); return; }
+    lsSet('kb-remind', true); scheduleReminders(); render(); toast('Reminders on: 15 minutes before each event');
+  } catch { toast('Could not turn on reminders.'); }
+}
+
+/* ---------- domain ---------- */
+const members = () => all('members').sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+const member = id => get('members', id);
+const colorOf = id => (member(id) || {}).color || 'slate';
+const familyName = () => (get('settings', 'family') || {}).name || 'Our Family';
+
+function occursOn(e, day) {
+  if (day < e.date) return false;
+  if (e.exdates && e.exdates.includes(day)) return false;
+  const rep = e.repeat || 'none';
+  if (rep === 'none') return day <= (e.endDate && e.allDay ? e.endDate : e.date);
+  if (e.until && day > e.until) return false;
+  const a = pd(e.date), b = pd(day), iv = Math.max(1, e.interval || 1), days = Math.round((b - a) / 864e5);
+  if (rep === 'daily') return days % iv === 0;
+  if (rep === 'weekly') {
+    if (Math.floor((days + a.getDay()) / 7) % iv) return false;
+    return e.byDays && e.byDays.length ? e.byDays.includes(b.getDay()) : a.getDay() === b.getDay();
+  }
+  if (rep === 'monthly') {
+    if (((b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth()) % iv) return false;
+    if (e.nth) {
+      if (b.getDay() !== e.nth.dow) return false;
+      if (e.nth.n > 0) return Math.ceil(b.getDate() / 7) === e.nth.n;
+      return b.getDate() + 7 > new Date(b.getFullYear(), b.getMonth() + 1, 0).getDate();
+    }
+    return a.getDate() === b.getDate();
+  }
+  if (rep === 'yearly') return (b.getFullYear() - a.getFullYear()) % iv === 0 && a.getDate() === b.getDate() && a.getMonth() === b.getMonth();
+  return false;
+}
+const evSort = (a, b) => (a.allDay === b.allDay ? 0 : a.allDay ? -1 : 1) || (a.start || '').localeCompare(b.start || '');
+const allEventsOn = day => all('events').filter(e => occursOn(e, day)).sort(evSort);
+function eventsOn(day) {
+  const f = ui.filter;
+  return all('events').filter(e => occursOn(e, day) && (!f.size || !(e.memberIds || []).length || e.memberIds.some(m => f.has(m))))
+    .sort((a, b) => (a.allDay === b.allDay ? 0 : a.allDay ? -1 : 1) || (a.start || '').localeCompare(b.start || ''));
+}
+function evStyle(e) {
+  const ids = (e.memberIds || []).filter(member);
+  if (ids.length < 2) return { cls: `m c-${ids.length ? colorOf(ids[0]) : 'slate'}`, style: '' };
+  const stops = ids.slice(0, 3).map(i => `var(--${colorOf(i)}-bg)`);
+  return { cls: `m c-${colorOf(ids[0])}`, style: `--evbg:linear-gradient(135deg,${stops.map((s, i) => `${s} ${Math.round(i / stops.length * 100)}% ${Math.round((i + 1) / stops.length * 100)}%`).join(',')});background:var(--evbg)` };
+}
+const avatar = (id, sm) => { const m = member(id); if (!m) return ''; return `<span class="av ${sm ? 'sm' : ''} m c-${m.color}" title="${esc(m.name)}">${esc((m.name || '?').trim()[0] || '?').toUpperCase()}</span>`; };
+const avatars = ids => `<span class="avs">${(ids || []).filter(member).slice(0, 4).map(i => avatar(i, true)).join('')}</span>`;
+
+const choreOn = (c, day) => !(c.days && c.days.length) || c.days.includes(pd(day).getDay());
+const doneKey = (day, cid) => `${day}_${cid}`;
+const isDone = (day, cid) => S.completions.has(doneKey(day, cid));
+function choreStats(mid, day) {
+  const list = all('chores').filter(c => (c.memberId || '') === mid && choreOn(c, day));
+  return { total: list.length, done: list.filter(c => isDone(day, c.id)).length };
+}
+function starBalance(mid) {
+  let earned = 0, spent = 0, adj = 0;
+  S.completions.forEach(c => { if (c.memberId === mid) earned += Number(c.stars) || 0; });
+  S.redemptions.forEach(r => { if (r.memberId !== mid) return; if (r.adjust) adj -= Number(r.cost) || 0; else spent += Number(r.cost) || 0; });
+  return { earned, spent, adj, bal: earned - spent + adj };
+}
+
+/* ---------- ui state ---------- */
+const ui = {
+  tab: lsGet('kb-tab', 'today'),
+  calMode: lsGet('kb-cal', isWide() ? 'week' : 'day'),
+  cursor: today(), filter: new Set(), choreDay: today(), listId: lsGet('kb-list', null), mealWeek: mondayOf(today()),
+};
+const TABS = [['today','Today','sun'],['calendar','Calendar','cal'],['chores','Chores','chores'],['rewards','Rewards','star'],['lists','Lists','list'],['meals','Meals','meal'],['settings','Family','gear']];
+
+let rq = 0;
+function queueRender() { if (!rq) rq = requestAnimationFrame(() => { rq = 0; render(); }); }
+
+function renderNav() {
+  const nav = $('nav.tabs');
+  nav.innerHTML = `<div class="brand" aria-hidden="true">K</div>` + TABS.map(([k, l, ic]) =>
+    `<button class="tab" data-act="tab" data-id="${k}" ${ui.tab === k ? 'aria-current="page"' : ''}>${svg(ic)}<span>${l}</span></button>`).join('')
+    + `<button class="tab sleep" data-act="sleep">${svg('moon')}<span>Sleep</span></button>`;
+}
+function renderTop() {
+  const now = new Date();
+  const ms = members(), day = today();
+  $('#top').innerHTML = `
+    <div class="hrow">
+      <h1 class="family">${esc(familyName())}</h1>
+      <span class="clock tn" id="clock">${fmtT(fromMin(now.getHours() * 60 + now.getMinutes()))}</span>
+      <span class="hdate">${DOWL[now.getDay()]}, ${MON[now.getMonth()]} ${now.getDate()}</span>${wxBadge()}
+      <span class="sync ${mode === 'local' || syncState !== 'ok' ? 'local' : ''}" title="${mode === 'cloud' ? 'Changes sync to everyone in your family' : 'Saved on this device only'}"><i></i>${mode === 'cloud' ? ({ ok: 'Synced', pending: 'Saving…', offline: 'Offline · will sync' })[syncState] : mode === 'local' ? 'This device only' : ''}</span>
+    </div>
+    <div class="chips ${ui.filter.size ? 'filtering' : ''}" role="group" aria-label="Show events for">
+      ${ms.map(m => { const s = choreStats(m.id, day); return `<button class="chip m c-${m.color} ${ui.filter.has(m.id) ? 'on' : ''}" data-act="filter" data-id="${m.id}" aria-pressed="${ui.filter.has(m.id)}">${avatar(m.id)}<span>${esc(m.name)}</span><span class="cnt tn">${s.total ? `${s.done}/${s.total}` : ''}</span></button>`; }).join('')}
+      ${canWrite ? `<button class="chip add" data-act="member-new">+ Add person</button>` : ''}
+    </div>`;
+}
+function tickClock() {
+  refreshWeather(false);
+  const el = $('#clock'); if (!el) return;
+  const n = new Date(); el.textContent = fmtT(fromMin(n.getHours() * 60 + n.getMinutes()));
+  if (!$('#sleep').hidden) renderSleep();
+  if (ui.tab === 'calendar' && (ui.calMode === 'day' || ui.calMode === 'week')) placeNowLine();
+}
+
+function render() {
+  // preserve focus + typed values across re-render
+  const view = $('#view');
+  const act = document.activeElement, actId = act && view.contains(act) ? act.id : null;
+  const vals = {}; view.querySelectorAll('input[id]').forEach(i => vals[i.id] = i.value);
+  document.body.classList.toggle('setup-mode', mode === 'setup');
+  if (mode === 'setup') { $('#top').innerHTML = ''; view.innerHTML = vSetup(); $('#fab').hidden = true; const j = $('#joinCode'); if (j && vals.joinCode) j.value = vals.joinCode; return; }
+  renderNav(); renderTop();
+  if (mode === 'loading') return;
+  const fn = { today: vToday, calendar: vCalendar, chores: vChores, rewards: vRewards, lists: vLists, meals: vMeals, settings: vSettings }[ui.tab] || vCalendar;
+  view.innerHTML = (canWrite ? '' : `<div class="banner">You can view this board. Ask the owner for Contributor access to make changes.</div>`) + fn();
+  Object.entries(vals).forEach(([id, v]) => { const i = document.getElementById(id); if (i && i.type !== 'file') i.value = v; });
+  if (actId) { const i = document.getElementById(actId); if (i) i.focus(); }
+  $('#fab').hidden = !canWrite || ui.tab === 'settings' || !members().length && ui.tab !== 'lists';
+  if (ui.tab === 'calendar') placeNowLine();
+  if (ui.tab === 'settings') fillThumbs();
+  scheduleReminders();
+}
+
+/* ---------- first run: create or join a family ---------- */
+function vSetup() {
+  const invite = normCode((location.hash.match(/join-([A-Za-z0-9-]+)/) || [])[1] || '');
+  return `<div class="setup">
+    <div><p class="hero">Your family, on one board.</p><p class="lead">Calendar, chores, rewards, lists and meals, shared live between everyone's phones.</p></div>
+    <section class="card"><h3>Join your family</h3><p class="note">Someone already set up Kinboard? Enter the 16-character family code from their Family tab.</p>
+      <form data-form="join" style="display:grid;gap:10px"><input type="text" id="joinCode" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EFGH-JKLM-NPQR" value="${invite ? fmtCode(invite) : ''}" aria-label="Family code"><button class="btn primary" type="submit" id="joinBtn">Join family</button></form></section>
+    <section class="card"><h3>Start a new family</h3><p class="note">Creates a private family board and gives you a code to share.</p><button class="btn primary" data-act="fam-create">Create family</button></section>
+    <button class="btn" data-act="fam-local" style="justify-self:center">Use on this device only, without sync</button>
+  </div>`;
+}
+
+/* ---------- today: the whole family's day at a glance ---------- */
+function vToday() {
+  if (!members().length) return onboarding();
+  const d = today(), n = new Date(), nowM = n.getHours() * 60 + n.getMinutes();
+  const evs = allEventsOn(d), ms = members();
+  const fam = evs.filter(e => !(e.memberIds || []).some(member));
+  const dinner = get('meals', `${d}_dinner`);
+  const evRow = e => {
+    const s = e.allDay ? -1 : toMin(e.start), en = e.allDay ? 1440 : toMin(e.end || e.start);
+    const st = e.allDay ? '' : en <= nowM ? 'past' : s <= nowM ? 'now' : '';
+    const c = evStyle(e);
+    return `<button class="trow ${c.cls} ${st}" style="${c.style}" data-act="ev" data-id="${e.id}" data-day="${d}"><span class="t tn">${e.allDay ? 'All day' : fmtT(e.start)}</span><b>${esc(e.title)}</b>${st === 'now' ? '<span class="nowtag">Now</span>' : ''}</button>`;
+  };
+  const choreRow = c => `<button class="chore ${isDone(d, c.id) ? 'done' : ''}" data-act="chore-toggle" data-id="${c.id}" data-day="${d}"><span class="tick">${svg('check', 3)}</span><span class="ct">${esc(c.title)}</span>${Number(c.stars) ? `<span class="stars">★ ${c.stars}</span>` : ''}</button>`;
+  const anyone = all('chores').filter(c => !c.memberId && choreOn(c, d));
+  return `<div class="todayhead"><h2>${DOWL[n.getDay()]}, ${MON[n.getMonth()]} ${n.getDate()}</h2>
+    <div class="strip">${wxToday()}${fam.map(evRow).join('')}${dinner ? `<button class="trow dinner" data-act="tab" data-id="meals"><span class="t">Dinner</span><b>${esc(dinner.text)}</b></button>` : ''}${anyone.length ? `<span class="note">${anyone.filter(c => isDone(d, c.id)).length}/${anyone.length} family chores done</span>` : ''}</div></div>
+  <div class="today-grid">${ms.map(m => {
+    const mine = evs.filter(e => (e.memberIds || []).includes(m.id));
+    const ch = all('chores').filter(c => c.memberId === m.id && choreOn(c, d)).sort((a, b) => ['morning', 'afternoon', 'evening', 'any'].indexOf(a.when || 'any') - ['morning', 'afternoon', 'evening', 'any'].indexOf(b.when || 'any'));
+    const done = ch.filter(c => isDone(d, c.id)).length;
+    const streak = streakFor(m.id, d);
+    return `<section class="card tcol m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1;min-width:0"><h3>${esc(m.name)}</h3><div class="meta tn">${ch.length ? `${done} of ${ch.length} chores` : 'No chores today'} · <span class="stars" data-stars="${m.id}">★ ${starBalance(m.id).bal}</span>${streak >= 2 ? ` · <span class="streak">🔥 ${streak}</span>` : ''}</div></div></div>
+      ${ch.length ? `<div class="bar"><i style="width:${done / ch.length * 100}%"></i></div>` : ''}
+      <h4>Schedule</h4>${mine.length ? mine.map(evRow).join('') : '<p class="note">Nothing scheduled</p>'}
+      ${ch.length ? `<h4>Chores</h4>${ch.map(choreRow).join('')}` : ''}
+      ${ch.length && done === ch.length ? `<p class="alldone">All done today!${streak >= 2 ? ` ${streak} day streak 🔥` : ''}</p>` : ''}
+    </section>`;
+  }).join('')}${anyone.length ? `<section class="card tcol m c-slate"><div class="mhead"><span class="av">★</span><div><h3>Anyone</h3><div class="meta">Shared chores</div></div></div>${anyone.map(choreRow).join('')}</section>` : ''}</div>`;
+}
+
+/* ---------- calendar ---------- */
+const H0 = 6, H1 = 23;
+function vCalendar() {
+  if (!members().length && !S.events.size) return onboarding();
+  const m = ui.calMode, c = ui.cursor, d = pd(c);
+  const n = m === 'week' ? (isWide() ? 7 : 3) : 1;
+  let title;
+  if (m === 'month') title = `${MON[d.getMonth()]} ${d.getFullYear()}`;
+  else if (m === 'day') title = `${DOW[d.getDay()]}, ${MON[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+  else if (m === 'agenda') title = `From ${MON[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+  else { const e = pd(addDays(c, n - 1)); title = `${MON[d.getMonth()].slice(0, 3)} ${d.getDate()} – ${d.getMonth() !== e.getMonth() ? MON[e.getMonth()].slice(0, 3) + ' ' : ''}${e.getDate()}`; }
+  const tb = `<div class="toolbar">
+    <button class="ibtn" data-act="cal-prev" aria-label="Previous">${svg('left')}</button>
+    <button class="btn" data-act="cal-today">Today</button>
+    <button class="ibtn" data-act="cal-next" aria-label="Next">${svg('right')}</button>
+    <h2 class="tn">${title}</h2>
+    <div class="seg" role="group" aria-label="View">${[['day','Day'],['week',isWide() ? 'Week' : '3 Day'],['month','Month'],['agenda','List']].map(([k, l]) => `<button data-act="cal-mode" data-id="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>
+  </div>`;
+  if (m === 'month') return tb + vMonth();
+  if (m === 'agenda') return tb + vAgenda();
+  return tb + vGrid(c, n);
+}
+function vGrid(start, n) {
+  const days = Array.from({ length: n }, (_, i) => addDays(start, i)), td = today();
+  const head = `<div class="tg-row tg-head" style="--cols:${n}"><div></div>${days.map(x => { const dd = pd(x); return `<div class="dh ${x === td ? 'today' : ''}"><small>${DOW[dd.getDay()]}</small>${dd.getDate()}</div>`; }).join('')}</div>`;
+  const allday = `<div class="tg-row tg-all" style="--cols:${n}"><div class="lab">all-day</div>${days.map(x => `<div>${eventsOn(x).filter(e => e.allDay).map(e => { const s = evStyle(e); return `<button class="pill ${s.cls}" style="${s.style}" data-act="ev" data-id="${e.id}" data-day="${x}">${esc(e.title)}</button>`; }).join('')}</div>`).join('')}</div>`;
+  const hh = H1 - H0;
+  const hours = `<div class="hours" style="height:calc(var(--hour) * ${hh})">${Array.from({ length: hh }, (_, i) => i ? `<span style="top:calc(var(--hour) * ${i})">${fmtT(pad(H0 + i) + ':00').replace(':00', '')}</span>` : '').join('')}</div>`;
+  const cols = days.map(x => {
+    const evs = eventsOn(x).filter(e => !e.allDay).map(e => ({ e, s: Math.max(toMin(e.start), H0 * 60), en: Math.min(Math.max(toMin(e.end || e.start), toMin(e.start) + 30), H1 * 60) }));
+    layoutLanes(evs);
+    return `<div class="dcol ${x === td ? 'today' : ''}" data-act="slot" data-id="${x}" style="height:calc(var(--hour) * ${hh})">${evs.map(o => {
+      const top = (o.s - H0 * 60) / 60, h = Math.max((o.en - o.s) / 60, .45), st = evStyle(o.e), w = 100 / o.lanes;
+      return `<button class="ev ${st.cls}" data-act="ev" data-id="${o.e.id}" data-day="${x}" style="top:calc(var(--hour) * ${top});height:calc(var(--hour) * ${h} - 2px);left:calc(${o.lane * w}% + 2px);width:calc(${w}% - 4px);${st.style}"><b>${esc(o.e.title)}</b>${h >= .9 ? `<span class="t tn">${fmtRange(o.e)}</span>` : ''}${h >= 1.2 ? avatars(o.e.memberIds) : ''}</button>`;
+    }).join('')}${x === td ? '<div class="nowline" id="nowline"></div>' : ''}</div>`;
+  }).join('');
+  return `<div class="tg">${head}${allday}<div class="tg-row tg-body" style="--cols:${n}">${hours}${cols}</div></div>`;
+}
+function layoutLanes(evs) {
+  evs.sort((a, b) => a.s - b.s || b.en - a.en);
+  let cluster = [], end = -1;
+  const flush = () => { const lanes = []; cluster.forEach(o => { let i = lanes.findIndex(x => x <= o.s); if (i < 0) { i = lanes.length; lanes.push(0); } lanes[i] = o.en; o.lane = i; }); cluster.forEach(o => o.lanes = lanes.length); cluster = []; };
+  evs.forEach(o => { if (cluster.length && o.s >= end) flush(); cluster.push(o); end = Math.max(end, o.en); });
+  flush();
+}
+function placeNowLine() {
+  const el = $('#nowline'); if (!el) return;
+  const n = new Date(), m = n.getHours() * 60 + n.getMinutes();
+  if (m < H0 * 60 || m > H1 * 60) { el.hidden = true; return; }
+  el.hidden = false; el.style.top = `calc(var(--hour) * ${(m - H0 * 60) / 60})`;
+}
+function vMonth() {
+  const first = pd(ui.cursor); first.setDate(1);
+  const start = addDays(ds(first), -first.getDay()), td = today(), mo = first.getMonth();
+  let h = `<div class="mg">${DOW.map(x => `<div class="wd">${x}</div>`).join('')}`;
+  for (let i = 0; i < 42; i++) {
+    const x = addDays(start, i), dd = pd(x), evs = eventsOn(x);
+    if (i === 35 && dd.getMonth() !== mo) break;
+    h += `<button class="mc ${dd.getMonth() !== mo ? 'out' : ''} ${x === td ? 'today' : ''}" data-act="month-day" data-id="${x}" aria-label="${MON[dd.getMonth()]} ${dd.getDate()}, ${evs.length} events"><span class="n tn">${dd.getDate()}</span>
+      ${evs.slice(0, 3).map(e => { const s = evStyle(e); return `<span class="pill ${s.cls}" style="${s.style}">${e.allDay ? '' : `<span class="tn">${fmtT(e.start).replace(' ', '').toLowerCase()}</span> `}${esc(e.title)}</span>`; }).join('')}
+      ${evs.length > 3 ? `<span class="more">+${evs.length - 3} more</span>` : ''}
+      <span class="dots">${evs.slice(0, 5).map(e => `<i class="${evStyle(e).cls}"></i>`).join('')}</span></button>`;
+  }
+  return h + '</div>';
+}
+function vAgenda() {
+  const td = today(); let out = '';
+  for (let i = 0; i < 21; i++) {
+    const x = addDays(ui.cursor, i), evs = eventsOn(x); if (!evs.length) continue;
+    const dd = pd(x);
+    out += `<div class="agday"><h3 class="${x === td ? 'today' : ''}">${x === td ? 'Today · ' : ''}${DOWL[dd.getDay()]}, ${MON[dd.getMonth()]} ${dd.getDate()}</h3>${evs.map(e => { const s = evStyle(e); return `<button class="agrow ${s.cls}" style="${s.style}" data-act="ev" data-id="${e.id}" data-day="${x}"><span class="t tn">${e.allDay ? 'All day' : fmtT(e.start)}</span><b>${esc(e.title)}</b>${avatars(e.memberIds)}</button>`; }).join('')}</div>`;
+  }
+  return out ? `<div class="ag">${out}</div>` : `<div class="empty"><h3>Nothing planned for the next three weeks</h3><p>Tap + to add an event, or import a calendar from Google or Apple in Family settings.</p></div>`;
+}
+function onboarding() {
+  return `<div class="empty" style="margin-top:20px"><h3>Set up your family board</h3>
+    <p>Add each person in your household with their own color. Events, chores and stars are tracked per person and sync to every phone that opens this board.</p>
+    <div class="row"><button class="btn primary" data-act="member-new">Add the first person</button>${canWrite ? '<button class="btn" data-act="sample-load">Try it with sample data</button>' : ''}</div></div>`;
+}
+
+/* ---------- chores ---------- */
+function vChores() {
+  if (!members().length) return onboarding();
+  const day = ui.choreDay, dd = pd(day), td = today();
+  const label = day === td ? 'Today' : day === addDays(td, -1) ? 'Yesterday' : day === addDays(td, 1) ? 'Tomorrow' : `${DOW[dd.getDay()]}, ${MON[dd.getMonth()].slice(0, 3)} ${dd.getDate()}`;
+  const tb = `<div class="toolbar"><button class="ibtn" data-act="chore-prev" aria-label="Previous day">${svg('left')}</button><button class="btn" data-act="chore-today">Today</button><button class="ibtn" data-act="chore-next" aria-label="Next day">${svg('right')}</button><h2>${label}</h2></div>`;
+  const groups = members().map(m => ({ id: m.id, m })).concat(all('chores').some(c => !c.memberId) ? [{ id: '', m: { name: 'Anyone', color: 'slate' } }] : []);
+  const anyChores = all('chores').length;
+  if (!anyChores) return tb + `<div class="empty"><h3>No chores yet</h3><p>Add daily routines like “Make bed” or weekly jobs like “Take out recycling”. Each one can earn stars toward rewards.</p><div class="row"><button class="btn primary" data-act="chore-new">Add a chore</button></div></div>`;
+  return tb + `<div class="grid-cards">${groups.map(g => {
+    const list = all('chores').filter(c => (c.memberId || '') === g.id && choreOn(c, day)).sort((a, b) => ['morning', 'afternoon', 'evening', 'any'].indexOf(a.when || 'any') - ['morning', 'afternoon', 'evening', 'any'].indexOf(b.when || 'any') || a.title.localeCompare(b.title));
+    const done = list.filter(c => isDone(day, c.id)).length;
+    return `<section class="card m c-${g.m.color}" data-person="${g.id}"><div class="mhead">${g.id ? avatar(g.id) : '<span class="av">★</span>'}<div style="flex:1;min-width:0"><h3>${esc(g.m.name)}</h3><div class="meta tn">${list.length ? `${done} of ${list.length} done` : 'Nothing scheduled'}${g.id ? ` · <span class="stars" data-stars="${g.id}">★ ${starBalance(g.id).bal}</span>` : ''}</div></div></div>
+      <div class="bar"><i style="width:${list.length ? done / list.length * 100 : 0}%"></i></div>
+      ${list.map(c => `<div style="display:flex;align-items:center"><button class="chore ${isDone(day, c.id) ? 'done' : ''}" data-act="chore-toggle" data-id="${c.id}"><span class="tick">${svg('check', 3)}</span><span class="ct">${esc(c.title)}<small>${c.when && c.when !== 'any' ? c.when[0].toUpperCase() + c.when.slice(1) : 'Any time'}</small></span>${Number(c.stars) ? `<span class="stars">★ ${c.stars}</span>` : ''}</button>${canWrite ? `<button class="edit" data-act="chore-edit" data-id="${c.id}" aria-label="Edit ${esc(c.title)}">${svg('pen')}</button>` : ''}</div>`).join('')}
+    </section>`;
+  }).join('')}</div>`;
+}
+
+/* ---------- rewards ---------- */
+function vRewards() {
+  if (!members().length) return onboarding();
+  const rw = all('rewards').sort((a, b) => a.cost - b.cost);
+  const hist = all('redemptions').sort((a, b) => b.at - a.at).slice(0, 12);
+  return `<div class="toolbar"><h2>Stars & rewards</h2>${canWrite ? '<button class="btn" data-act="reward-new">Add reward</button>' : ''}</div>
+  <div class="grid-cards">${members().map(m => { const b = starBalance(m.id); return `<section class="card m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1"><h3>${esc(m.name)}</h3><div class="meta tn">${b.earned} earned · ${b.spent} spent${b.adj ? ` · ${b.adj > 0 ? '+' : ''}${b.adj} adjusted` : ''}</div></div><span class="bal tn" data-stars="${m.id}">★ ${b.bal}</span></div>
+    <button class="btn" data-act="adjust" data-id="${m.id}" style="height:30px;font-size:13px;margin-bottom:6px">Adjust stars</button>
+    ${rw.length ? rw.map(r => `<div class="reward"><span class="ct"><b>${esc(r.title)}</b><small class="stars">★ ${r.cost}</small></span><button class="btn ${b.bal >= r.cost ? 'primary' : ''}" data-act="redeem" data-id="${r.id}" data-m="${m.id}" ${b.bal >= r.cost ? '' : 'disabled style="opacity:.5"'}>${b.bal >= r.cost ? 'Redeem' : `${r.cost - b.bal} to go`}</button></div>`).join('') : '<p class="note">Add rewards like “Pick the movie” or “30 min screen time”.</p>'}
+  </section>`; }).join('')}</div>
+  ${rw.length && canWrite ? `<h3 class="section-title">Reward list</h3><div class="card">${rw.map(r => `<div class="reward"><span class="ct"><b>${esc(r.title)}</b></span><span class="stars">★ ${r.cost}</span><button class="edit" data-act="reward-edit" data-id="${r.id}" aria-label="Edit">${svg('pen')}</button></div>`).join('')}</div>` : ''}
+  ${hist.length ? `<h3 class="section-title">Recent star activity</h3><div class="card">${hist.map(h => `<div class="reward hist">${avatar(h.memberId, true)}<span class="ct">${esc((member(h.memberId) || {}).name || 'Someone')} ${h.adjust ? '' : 'redeemed '}<b style="display:inline">${esc(h.title)}</b></span><span class="tn">${h.adjust ? (h.cost < 0 ? '+' + -h.cost : '−' + h.cost) : '−' + h.cost} ★</span></div>`).join('')}</div>` : ''}`;
+}
+
+/* ---------- lists ---------- */
+function vLists() {
+  const ls = all('lists').sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  if (!ls.length) return `<div class="toolbar"><h2>Lists</h2></div><div class="empty"><h3>Start a shared list</h3><p>Groceries, packing, errands. Anyone in the family can add and check things off.</p><div class="row">${canWrite ? '<button class="btn primary" data-act="list-quick" data-id="Groceries">Create “Groceries”</button><button class="btn" data-act="list-new">New list</button>' : ''}</div></div>`;
+  if (!ls.find(l => l.id === ui.listId)) ui.listId = ls[0].id;
+  const items = all('items').filter(i => i.listId === ui.listId).sort((a, b) => (a.done - b.done) || (a.at - b.at));
+  const doneN = items.filter(i => i.done).length;
+  return `<div class="toolbar"><h2>Lists</h2>${canWrite ? '<button class="btn" data-act="list-new">New list</button>' : ''}</div>
+    <div class="listtabs">${ls.map(l => `<button class="btn" data-act="list-pick" data-id="${l.id}" aria-pressed="${l.id === ui.listId}">${esc(l.name)} <span class="tn" style="opacity:.7">${all('items').filter(i => i.listId === l.id && !i.done).length}</span></button>`).join('')}</div>
+    <div class="card" style="margin-top:12px">
+      ${canWrite ? `<form class="additem" data-form="item"><input type="text" id="itemText" placeholder="Add an item" autocomplete="off" aria-label="New item"><button class="btn primary" type="submit">Add</button></form>` : ''}
+      ${items.length ? items.map(i => `<div class="item ${i.done ? 'done' : ''}"><button class="tick" data-act="item-toggle" data-id="${i.id}" aria-label="${i.done ? 'Uncheck' : 'Check'} ${esc(i.text)}">${svg('check', 3)}</button><span>${esc(i.text)}</span>${canWrite ? `<button class="edit" data-act="item-del" data-id="${i.id}" aria-label="Remove ${esc(i.text)}">✕</button>` : ''}</div>`).join('') : '<p class="note">This list is empty.</p>'}
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">${doneN && canWrite ? `<button class="btn" data-act="items-clear">Clear ${doneN} checked</button>` : ''}${canWrite ? `<button class="btn" data-act="list-edit" data-id="${ui.listId}">Rename or delete list</button>` : ''}</div>
+    </div>`;
+}
+
+/* ---------- meals ---------- */
+const SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'];
+function vMeals() {
+  const w = ui.mealWeek, td = today(), e = pd(addDays(w, 6)), s = pd(w);
+  return `<div class="toolbar"><button class="ibtn" data-act="meal-prev" aria-label="Previous week">${svg('left')}</button><button class="btn" data-act="meal-this">This week</button><button class="ibtn" data-act="meal-next" aria-label="Next week">${svg('right')}</button><h2 class="tn">${MON[s.getMonth()].slice(0, 3)} ${s.getDate()} – ${MON[e.getMonth()].slice(0, 3)} ${e.getDate()}</h2></div>
+  <div class="meals">${Array.from({ length: 7 }, (_, i) => addDays(w, i)).map(x => { const dd = pd(x); return `<div class="mealday ${x === td ? 'today' : ''}"><div class="d">${DOW[dd.getDay()]}<small class="tn">${MON[dd.getMonth()].slice(0, 3)} ${dd.getDate()}</small></div>${SLOTS.map(sl => { const m = get('meals', `${x}_${sl}`); return `<button class="slot ${m ? '' : 'emptyslot'}" data-act="meal" data-id="${x}_${sl}"><small>${sl}</small><span>${m ? esc(m.text) : '+ Add'}</span></button>`; }).join('')}</div>`; }).join('')}</div>`;
+}
+
+/* ---------- settings ---------- */
+function vSettings() {
+  const ms = members();
+  const hasSample = COLS.some(c => all(c).some(x => x.sample));
+  return `<div class="settings"><div class="toolbar"><h2>Family & settings</h2></div>
+  <section class="card"><h3>Household</h3><form data-form="family" style="margin-top:12px"><label class="field"><span>Family name</span><input type="text" id="famName" value="${esc(familyName())}" ${canWrite ? '' : 'disabled'}></label>${canWrite ? '<button class="btn primary" type="submit">Save name</button>' : ''}</form></section>
+  <section class="card"><h3>People</h3><div style="margin-top:10px">${ms.map(m => `<div class="reward">${avatar(m.id)}<span class="ct"><b>${esc(m.name)}</b><small class="note">${m.role ? esc(m.role) : ''}</small></span>${canWrite ? `<button class="btn" data-act="member-edit" data-id="${m.id}">Edit</button>` : ''}</div>`).join('') || '<p class="note">No one added yet.</p>'}</div>${canWrite ? '<button class="btn primary" data-act="member-new" style="margin-top:10px">Add person</button>' : ''}</section>
+  <section class="card"><h3>Parent PIN</h3>${parentPin() ? `<p class="note">On. Kids can check off chores, add events and redeem rewards. Settings, chores, rewards, people, star changes and deleting events need the PIN.${lsGet('kb-parent-device', false) ? ' This device stays unlocked.' : ''}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="pin-set">Change PIN</button><button class="btn" data-act="pin-lock">Lock now</button><button class="btn danger" data-act="pin-remove">Remove PIN</button></div>` : '<p class="note">Off. Anyone using Kinboard can change everything. Set a PIN so kids can check off chores and redeem rewards, but not edit chores, change stars or delete events.</p><button class="btn primary" data-act="pin-set">Set a parent PIN</button>'}</section>
+  <section class="card"><h3>Calendars</h3><p class="note">Subscribe to Google, Apple or Outlook calendars to keep them in sync automatically, or import a one-time .ics file.</p>
+    ${all('feeds').map(fd => { const st = lsGet(`kb-feed-${fd.id}`, {}); return `<div class="reward">${avatars(fd.memberIds)}<span class="ct"><b>${esc(fd.name)}</b><small class="note">${st.at ? (st.ok ? `${st.n} events · checked ${fmtT(fromMin(new Date(st.at).getHours() * 60 + new Date(st.at).getMinutes()))}` : `Problem: ${esc(st.err || 'sync failed')}`) : 'Not synced yet'}</small></span><button class="btn" data-act="feed-edit" data-id="${fd.id}">Edit</button></div>`; }).join('')}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${mode === 'cloud' ? '<button class="btn primary" data-act="feed-new">Subscribe to a calendar</button>' : ''}${all('feeds').length ? '<button class="btn" data-act="feeds-sync">Sync now</button>' : ''}<button class="btn" data-act="ics">Import .ics file</button></div>
+    ${mode === 'cloud' ? '' : '<p class="note" style="margin-top:8px">Turn on family sync to subscribe to calendars.</p>'}</section>
+  <section class="card"><h3>Weather</h3><p class="note">${famSettings().weather ? `Showing weather for ${esc(famSettings().weather.place)} in °${famSettings().weather.unit || 'F'}.` : 'Show the temperature and today’s forecast.'}</p><button class="btn" data-act="weather">${famSettings().weather ? 'Change location' : 'Set location'}</button></section>
+  <section class="card"><h3>Photos</h3><p class="note">Family photos for the wall display's screensaver. Photos are resized before uploading and shared with everyone in your family.</p>
+    ${mode === 'cloud' ? `<div class="thumbs">${all('photos').sort((a, b) => b.at - a.at).map(ph => `<figure><img data-photo="${ph.id}" alt="Family photo"><button class="edit" data-act="photo-del" data-id="${ph.id}" aria-label="Delete photo">✕</button></figure>`).join('')}</div>
+    <input type="file" id="photoFile" accept="image/*" multiple hidden><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn primary" data-act="photo-add">Add photos</button>${all('photos').length ? '<button class="btn" data-act="saver-test">Preview screensaver</button>' : ''}</div>` : '<p class="note">Turn on family sync to add photos.</p>'}</section>
+  <section class="card"><h3>Wall display</h3><p class="note">For a touchscreen mounted at home. These settings apply to this screen only.</p>
+    <label class="check"><input type="checkbox" id="wallOn" data-wall="on" ${wall.on ? 'checked' : ''}> Wall display mode</label>
+    <p class="note" style="margin-top:-6px">Larger text and touch targets, keeps the screen on, goes back to Today after
+      <select id="idleMin" data-wall="idle" style="width:auto;height:34px">${[1, 2, 5, 10].map(v => `<option value="${v}" ${wall.idleMin === v ? 'selected' : ''}>${v}</option>`).join('')}</select> min without a touch, and reloads at 3:30 AM to pick up app updates.</p>
+    <label class="check">Photo screensaver after <select id="saverMin" data-wall="saver" style="width:auto;height:34px;margin:0 6px">${[[0, 'never'], [5, '5 min'], [10, '10 min'], [15, '15 min'], [30, '30 min']].map(([v, l]) => `<option value="${v}" ${wall.saverMin === v ? 'selected' : ''}>${l}</option>`).join('')}</select> without a touch</label>
+    <label class="check"><input type="checkbox" id="nightOn" data-wall="night" ${wall.nightOn ? 'checked' : ''}> Night clock from <input type="time" id="nightFrom" data-wall="from" value="${wall.from}" style="width:auto"> to <input type="time" id="nightTo" data-wall="to" value="${wall.to}" style="width:auto"></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="sleep">Show sleep clock now</button><button class="btn" data-act="fullscreen">Full screen</button><button class="btn" data-act="theme">Theme: ${({ light: 'Light', dark: 'Dark' })[document.documentElement.dataset.theme] || 'System'}</button></div></section>
+  <section class="card"><h3>Family sync</h3>
+    ${mode === 'cloud' ? `<p class="note">Everyone who enters this code in Kinboard sees and edits the same board. Treat it like a house key: anyone with it can see your family's calendar.</p>
+      <div class="code tn" id="famCodeShow">${fmtCode(famCode)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn primary" data-act="fam-share">Share code</button><button class="btn" data-act="fam-copy">Copy</button><button class="btn" data-act="sync-now">Sync now</button></div>
+      <p class="note" style="margin-top:12px">${outbox.length ? `${outbox.length} change${outbox.length > 1 ? 's' : ''} waiting to upload.` : 'All changes are uploaded.'}</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button class="btn" data-act="fam-leave" id="famLeave">Leave on this device</button><button class="btn danger" data-act="fam-delete" id="famDelete">Delete family for everyone</button></div>`
+    : `<p class="note">This board is saved on this device only. Turn on sync to share it with your family; everything here comes along.</p><button class="btn primary" data-act="fam-create">Turn on family sync</button> <button class="btn" data-act="fam-joinscreen">Join an existing family</button>`}
+  </section>
+  ${Native ? `<section class="card"><h3>Reminders</h3><p class="note">Get a notification 15 minutes before each timed event in the next week.</p>${lsGet('kb-remind', false) ? '<button class="btn" data-act="remind-off">Turn off reminders</button>' : '<button class="btn primary" data-act="remind-on">Turn on reminders</button>'}</section>` : ''}
+  <section class="card"><h3>Celebrations</h3><p class="note">Confetti and cheers when someone finishes a chore or redeems a reward. They also play on every other family screen that's open. These settings apply to this device only.</p>
+    <div class="two"><label class="field"><span>Intensity</span><select id="celLevel" data-cel="level">${[['full', 'Full'], ['subtle', 'Subtle'], ['off', 'Off']].map(([v, l]) => `<option value="${v}" ${celLevel() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+    <label class="check"><input type="checkbox" id="celSound" data-cel="sound" ${lsGet('kb-cel-sound', false) ? 'checked' : ''}> Celebration sounds</label>
+    <p class="note" style="margin-top:-6px">Sounds stay silent during night-clock hours. Celebrations never play while the night clock is showing.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${members().length ? [['chore', 'Chore'], ['allDone', 'All done'], ['milestone', 'Milestone'], ['redeem', 'Reward']].map(([k, l]) => `<button class="btn" data-act="cel-preview" data-id="${k}">Preview: ${l}</button>`).join('') : '<p class="note">Add a person to preview celebrations.</p>'}</div></section>
+  <section class="card"><h3>Sample data</h3><p class="note">Explore the app with a pretend family. Sample items are marked and can be removed in one tap.</p>
+    ${COLS.some(c => all(c).some(x => x.sample)) ? '<button class="btn danger" data-act="sample-clear" id="sampleClear">Remove sample data</button>' : '<button class="btn" data-act="sample-load">Load sample data</button>'}</section>
+  </div>`;
+}
+
+/* ---------- sheet (editors) ---------- */
+function openSheet(html, onSubmit, setup) {
+  const sh = $('#sheet');
+  sh.innerHTML = `<form id="sheetForm">${html}</form>`;
+  $('#scrim').hidden = false;
+  const f = $('#sheetForm');
+  f.onsubmit = ev => { ev.preventDefault(); onSubmit(f); };
+  if (setup) setup(f);
+  const first = f.querySelector('input[type=text]'); if (first && matchMedia('(hover:hover)').matches) first.focus();
+}
+const closeSheet = () => { $('#scrim').hidden = true; $('#sheet').innerHTML = ''; };
+const delBtn = () => `<button type="button" class="btn danger" data-del>Delete</button>`;
+const actions = (canDelete) => `<div class="actions">${canDelete ? delBtn() : ''}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" type="submit">Save</button></div>`;
+function armDelete(f, fn) {
+  const b = f.querySelector('[data-del]'); if (!b) return;
+  b.onclick = () => { if (b.classList.contains('armed')) { fn(); closeSheet(); } else { b.classList.add('armed'); b.textContent = 'Tap again to delete'; } };
+}
+const memberPicker = (sel, name = 'mem') => `<div class="pick" data-pick="${name}">${members().map(m => `<button type="button" class="m c-${m.color}" data-v="${m.id}" aria-pressed="${sel.includes(m.id)}">${avatar(m.id, true)}${esc(m.name)}</button>`).join('')}</div>`;
+const picked = (f, name) => [...f.querySelectorAll(`[data-pick="${name}"] [aria-pressed="true"]`)].map(b => b.dataset.v);
+function wirePick(f, single) {
+  f.querySelectorAll('[data-pick]').forEach(p => p.addEventListener('click', e => {
+    const b = e.target.closest('button[data-v]'); if (!b) return;
+    if (single.includes(p.dataset.pick)) p.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    else b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+  }));
+}
+
+function editEvent(id, preset = {}, occDay = null) {
+  const e = id ? get('events', id) : { title: '', date: preset.date || ui.cursor, start: preset.start || '09:00', end: preset.end || '10:00', allDay: false, memberIds: [...ui.filter], repeat: 'none' };
+  if (!e) return;
+  if (e.feed) return feedEventInfo(e, occDay);
+  if (!canWrite) { const d = pd(e.date); toast(`${e.title} · ${DOW[d.getDay()]} ${MON[d.getMonth()].slice(0, 3)} ${d.getDate()} · ${fmtRange(e)}`); return; }
+  const isRec = !!id && e.repeat && e.repeat !== 'none';
+  const occ = isRec && occDay && occursOn(e, occDay) ? occDay : null;
+  const { id: _i, ...orig } = e;
+  openSheet(`<h2>${id ? 'Edit event' : 'New event'}</h2>
+    ${occ ? `<div class="field"><span>Change</span><div class="pick days" data-pick="scope"><button type="button" data-v="this" aria-pressed="true">This event</button><button type="button" data-v="future" aria-pressed="false">This and following</button><button type="button" data-v="all" aria-pressed="false">All events</button></div></div>` : ''}
+    <label class="field"><span>Title</span><input type="text" id="evTitle" name="title" required value="${esc(e.title)}" placeholder="Soccer practice"></label>
+    <label class="check"><input type="checkbox" id="evAll" name="allDay" ${e.allDay ? 'checked' : ''}> All day</label>
+    <div class="two"><label class="field"><span>Date</span><input type="date" id="evDate" name="date" required value="${occ || e.date}"></label>
+      <label class="field" data-show="allday"><span>Ends</span><input type="date" id="evEndDate" name="endDate" value="${e.endDate || e.date}"></label></div>
+    <div class="two" data-show="timed"><label class="field"><span>Starts</span><input type="time" id="evStart" name="start" value="${e.start || '09:00'}"></label><label class="field"><span>Ends</span><input type="time" id="evEnd" name="end" value="${e.end || '10:00'}"></label></div>
+    <div class="field"><span>Who</span>${memberPicker(e.memberIds || [])}</div>
+    <div class="two" data-show="repwrap"><label class="field"><span>Repeats</span><select id="evRepeat" name="repeat">${['none', 'daily', 'weekly', 'monthly', 'yearly'].map(r => `<option value="${r}" ${e.repeat === r ? 'selected' : ''}>${r === 'none' ? 'Does not repeat' : r[0].toUpperCase() + r.slice(1)}</option>`).join('')}</select></label>
+      <label class="field" data-show="rep"><span>Until (optional)</span><input type="date" id="evUntil" name="until" value="${e.until || ''}"></label></div>
+    <div class="field" data-show="weekly"><span>On</span><div class="pick days" data-pick="byDays">${DOW.map((d, i) => `<button type="button" data-v="${i}" aria-pressed="${(e.byDays && e.byDays.length ? e.byDays : [pd(e.date).getDay()]).includes(i)}">${d}</button>`).join('')}</div></div>
+    <label class="field"><span>Notes</span><textarea id="evNotes" name="notes" placeholder="Bring shin guards">${esc(e.notes || '')}</textarea></label>
+    ${actions(!!id)}`, f => {
+    const v = Object.fromEntries(new FormData(f)), scope = occ ? picked(f, 'scope')[0] || 'this' : 'all';
+    const out = { title: v.title.trim(), date: v.date, allDay: !!v.allDay, memberIds: picked(f, 'mem'), repeat: v.repeat || 'none', notes: v.notes.trim() };
+    if (!out.title || !out.date) return;
+    if (out.allDay) { if (v.endDate && v.endDate > v.date && out.repeat === 'none') out.endDate = v.endDate; }
+    else { out.start = v.start || '09:00'; out.end = v.end && toMin(v.end) > toMin(out.start) ? v.end : fromMin(Math.min(toMin(out.start) + 60, 23 * 60 + 59)); }
+    if (out.repeat !== 'none' && v.until) out.until = v.until;
+    if (out.repeat === 'weekly') { const bd = picked(f, 'byDays').map(Number).sort(); if (bd.length > 1 || (bd.length === 1 && bd[0] !== pd(out.date).getDay())) out.byDays = bd; }
+    if (out.repeat !== 'none' && e.interval && e.repeat === out.repeat) out.interval = e.interval;
+    if (out.repeat === 'monthly' && e.nth && e.repeat === 'monthly' && out.date === e.date) out.nth = e.nth;
+    if (e.sample) out.sample = true;
+    if (e.src) out.src = e.src;
+    if (scope === 'this') {
+      put('events', id, { ...orig, exdates: [...new Set([...(orig.exdates || []), occ])] });
+      const single = { ...out, repeat: 'none' }; delete single.until; delete single.byDays; delete single.interval; delete single.nth;
+      put('events', uid(), single); closeSheet(); toast('This event changed');
+    } else if (scope === 'future' && occ > e.date) {
+      put('events', id, { ...orig, until: addDays(occ, -1) });
+      put('events', uid(), { ...out, exdates: (orig.exdates || []).filter(x => x >= occ) }); closeSheet(); toast('This and following events changed');
+    } else {
+      if (isRec && out.date === e.date && orig.exdates) out.exdates = orig.exdates;
+      put('events', id || uid(), out); closeSheet(); toast(id ? 'Event updated' : 'Event added');
+    }
+  }, f => {
+    wirePick(f, ['scope']);
+    const sync = () => { const ad = f.allDay.checked, rp = f.repeat.value !== 'none', sc = occ ? picked(f, 'scope')[0] : 'all';
+      f.querySelector('[data-show="allday"]').hidden = !ad || rp; f.querySelector('[data-show="timed"]').hidden = ad; f.querySelector('[data-show="rep"]').hidden = !rp;
+      f.querySelector('[data-show="weekly"]').hidden = f.repeat.value !== 'weekly' || sc === 'this'; f.querySelector('[data-show="repwrap"]').hidden = sc === 'this'; };
+    f.allDay.onchange = sync; f.repeat.onchange = sync;
+    const sp = f.querySelector('[data-pick="scope"]');
+    if (sp) sp.addEventListener('click', () => setTimeout(() => { const sc = picked(f, 'scope')[0]; f.date.value = sc === 'all' ? e.date : occ; sync(); }, 0));
+    sync();
+    const b = f.querySelector('[data-del]');
+    if (b) b.onclick = () => {
+      if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Tap again to delete'; return; }
+      const scope = occ ? picked(f, 'scope')[0] || 'this' : 'all';
+      const run = () => {
+        if (scope === 'this') { put('events', id, { ...orig, exdates: [...new Set([...(orig.exdates || []), occ])] }); toast('This event deleted'); }
+        else if (scope === 'future' && occ > e.date) { put('events', id, { ...orig, until: addDays(occ, -1) }); toast('This and following events deleted'); }
+        else { del('events', id); toast('Event deleted'); }
+      };
+      if (isParent()) { run(); closeSheet(); } else pinPad('delete events', run);
+    };
+  });
+}
+function editMember(id) {
+  const m = id ? get('members', id) : { name: '', color: COLORS[members().length % COLORS.length], role: '' };
+  openSheet(`<h2>${id ? 'Edit person' : 'Add person'}</h2>
+    <label class="field"><span>Name</span><input type="text" id="mName" name="name" required value="${esc(m.name)}" placeholder="Mom, Liam, Grandma…"></label>
+    <label class="field"><span>Role (optional)</span><input type="text" id="mRole" name="role" value="${esc(m.role || '')}" placeholder="Parent, Kid, Babysitter"></label>
+    <div class="field"><span>Color</span><div class="pick swatches" data-pick="color">${COLORS.map(c => `<button type="button" class="sw m c-${c}" data-v="${c}" aria-pressed="${m.color === c}" aria-label="${c}"></button>`).join('')}</div></div>
+    ${id ? '<p class="note">Deleting a person keeps their events but removes their color tag.</p>' : ''}
+    ${actions(!!id)}`, f => {
+    const name = f.name.value.trim(); if (!name) return;
+    const out = { name, role: f.role.value.trim(), color: picked(f, 'color')[0] || 'slate', order: m.order ?? Date.now() };
+    if (m.sample) out.sample = true;
+    put('members', id || uid(), out); closeSheet(); toast(id ? 'Saved' : `${name} added`);
+  }, f => { wirePick(f, ['color']); armDelete(f, () => { del('members', id); ui.filter.delete(id); }); });
+}
+function editChore(id) {
+  const c = id ? get('chores', id) : { title: '', memberId: [...ui.filter][0] || (members()[0] || {}).id || '', stars: 1, days: [], when: 'any' };
+  openSheet(`<h2>${id ? 'Edit chore' : 'New chore'}</h2>
+    <label class="field"><span>Chore</span><input type="text" id="cTitle" name="title" required value="${esc(c.title)}" placeholder="Feed the dog"></label>
+    <div class="field"><span>Assigned to</span><div class="pick" data-pick="who"><button type="button" data-v="" aria-pressed="${!c.memberId}">Anyone</button>${members().map(m => `<button type="button" class="m c-${m.color}" data-v="${m.id}" aria-pressed="${c.memberId === m.id}">${avatar(m.id, true)}${esc(m.name)}</button>`).join('')}</div></div>
+    <div class="field"><span>Days (none selected = every day)</span><div class="pick days" data-pick="days">${DOW.map((d, i) => `<button type="button" data-v="${i}" aria-pressed="${(c.days || []).includes(i)}">${d}</button>`).join('')}</div></div>
+    <div class="two"><label class="field"><span>Time of day</span><select id="cWhen" name="when">${['any', 'morning', 'afternoon', 'evening'].map(w => `<option value="${w}" ${c.when === w ? 'selected' : ''}>${w === 'any' ? 'Any time' : w[0].toUpperCase() + w.slice(1)}</option>`).join('')}</select></label>
+    <label class="field"><span>Stars earned</span><input type="number" id="cStars" name="stars" min="0" max="100" value="${c.stars ?? 1}"></label></div>
+    ${actions(!!id)}`, f => {
+    const title = f.title.value.trim(); if (!title) return;
+    const out = { title, memberId: picked(f, 'who')[0] || '', days: picked(f, 'days').map(Number).sort(), when: f.when.value, stars: Math.max(0, Math.min(100, Number(f.stars.value) || 0)) };
+    if (c.sample) out.sample = true;
+    put('chores', id || uid(), out); closeSheet(); toast(id ? 'Chore updated' : 'Chore added');
+  }, f => { wirePick(f, ['who']); armDelete(f, () => del('chores', id)); });
+}
+function editReward(id) {
+  const r = id ? get('rewards', id) : { title: '', cost: 10 };
+  openSheet(`<h2>${id ? 'Edit reward' : 'New reward'}</h2>
+    <label class="field"><span>Reward</span><input type="text" id="rTitle" name="title" required value="${esc(r.title)}" placeholder="Pick Friday's movie"></label>
+    <label class="field"><span>Cost in stars</span><input type="number" id="rCost" name="cost" min="1" max="1000" value="${r.cost}"></label>
+    ${actions(!!id)}`, f => {
+    const title = f.title.value.trim(); if (!title) return;
+    put('rewards', id || uid(), { title, cost: Math.max(1, Number(f.cost.value) || 1), ...(r.sample ? { sample: true } : {}) }); closeSheet();
+  }, f => armDelete(f, () => del('rewards', id)));
+}
+function editMeal(key) {
+  const [date, slot] = key.split('_'), m = get('meals', key) || { text: '', ingredients: '' }, dd = pd(date);
+  const ls = all('lists');
+  openSheet(`<h2>${slot[0].toUpperCase() + slot.slice(1)} · ${DOW[dd.getDay()]} ${MON[dd.getMonth()].slice(0, 3)} ${dd.getDate()}</h2>
+    <label class="field"><span>Meal</span><input type="text" id="mlText" name="text" value="${esc(m.text)}" placeholder="Tacos"></label>
+    <label class="field"><span>Ingredients (comma separated, optional)</span><textarea id="mlIng" name="ingredients" placeholder="tortillas, ground beef, salsa, cheese">${esc(m.ingredients || '')}</textarea></label>
+    ${ls.length ? `<label class="check"><input type="checkbox" id="mlAdd" name="addTo"> Add ingredients to <select id="mlList" name="list" style="width:auto;height:34px;margin-left:4px">${ls.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></label>` : '<p class="note">Create a list to send ingredients to your grocery list.</p>'}
+    ${actions(!!S.meals.get(key))}`, async f => {
+    const text = f.text.value.trim(), ing = f.ingredients.value.trim();
+    if (!text) { if (S.meals.has(key)) del('meals', key); closeSheet(); return; }
+    put('meals', key, { date, slot, text, ingredients: ing, ...(m.sample ? { sample: true } : {}) });
+    closeSheet();
+    if (f.addTo && f.addTo.checked && ing) {
+      const parts = ing.split(',').map(s => s.trim()).filter(Boolean);
+      const n = await putMany(parts.map((t, i) => ['items', uid() + i, { listId: f.list.value, text: t, done: false, at: Date.now() + i }]));
+      toast(`Added ${n} items to ${(get('lists', f.list.value) || {}).name}`);
+    } else toast('Meal saved');
+  }, f => armDelete(f, () => del('meals', key)));
+}
+function editList(id) {
+  const l = id ? get('lists', id) : { name: '' };
+  openSheet(`<h2>${id ? 'Edit list' : 'New list'}</h2><label class="field"><span>Name</span><input type="text" id="lName" name="name" required value="${esc(l.name)}" placeholder="Groceries"></label>${id ? '<p class="note">Deleting a list also removes its items.</p>' : ''}${actions(!!id)}`, f => {
+    const name = f.name.value.trim(); if (!name) return;
+    const nid = id || uid(); put('lists', nid, { name, order: l.order ?? Date.now(), ...(l.sample ? { sample: true } : {}) }); ui.listId = nid; closeSheet();
+  }, f => armDelete(f, async () => { const its = all('items').filter(i => i.listId === id); await del('lists', id); for (const i of its) await del('items', i.id); }));
+}
+function redeem(rid, mid) {
+  const r = get('rewards', rid), m = member(mid); if (!r || !m) return;
+  openSheet(`<h2>Redeem reward</h2><p>${esc(m.name)} spends <b class="stars">★ ${r.cost}</b> on <b>${esc(r.title)}</b>. Balance after: ★ ${starBalance(mid).bal - r.cost}.</p><div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" type="submit">Redeem</button></div>`, () => {
+    put('redemptions', uid(), { memberId: mid, rewardId: rid, title: r.title, cost: r.cost, at: Date.now() }); closeSheet();
+    emitCelebrations([{ type: 'redeem', personId: mid, title: r.title, cost: r.cost, newBal: starBalance(mid).bal }]);
+    if (celLevel() === 'off') toast(`${m.name} redeemed ${r.title}`);
+  });
+}
+
+/* ---------- .ics import ---------- */
+function parseICS(text) {
+  const lines = text.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '').split(/\r?\n/);
+  const out = []; let cur = null;
+  const unesc = s => s.replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1');
+  const dt = (params, v) => {
+    const m = v.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?/); if (!m) return null;
+    if (!m[4] || /VALUE=DATE(?!-)/.test(params)) return { date: `${m[1]}-${m[2]}-${m[3]}`, allDay: true };
+    let d = m[7] ? new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5])) : new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]);
+    return { date: ds(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, allDay: false };
+  };
+  for (const ln of lines) {
+    if (ln === 'BEGIN:VEVENT') { cur = {}; continue; }
+    if (ln === 'END:VEVENT') { if (cur && cur.start) out.push(cur); cur = null; continue; }
+    if (!cur) continue;
+    const i = ln.indexOf(':'); if (i < 0) continue;
+    const [name, ...ps] = ln.slice(0, i).split(';'), params = ps.join(';'), v = ln.slice(i + 1);
+    if (name === 'SUMMARY') cur.title = unesc(v);
+    else if (name === 'UID') cur.uid = v;
+    else if (name === 'DTSTART') cur.start = dt(params, v);
+    else if (name === 'DTEND') cur.end = dt(params, v);
+    else if (name === 'RRULE') cur.rrule = v;
+    else if (name === 'EXDATE') (cur.exdates = cur.exdates || []).push(...v.split(',').map(x => (dt(params, x) || {}).date).filter(Boolean));
+    else if (name === 'RECURRENCE-ID') cur.recurId = (dt(params, v) || {}).date;
+    else if (name === 'DESCRIPTION') cur.notes = unesc(v).slice(0, 500);
+    else if (name === 'STATUS' && v === 'CANCELLED') cur.cancelled = true;
+  }
+  return out;
+}
+const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
+function rruleFields(rr, start) {
+  const P = Object.fromEntries(String(rr || '').split(';').map(kv => kv.split('=')));
+  const rep = { DAILY: 'daily', WEEKLY: 'weekly', MONTHLY: 'monthly', YEARLY: 'yearly' }[P.FREQ] || 'none', f = { repeat: rep };
+  if (rep === 'none') return f;
+  const iv = Math.max(1, +P.INTERVAL || 1); if (iv > 1) f.interval = iv;
+  const DMAP = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+  if (P.BYDAY) {
+    const parts = P.BYDAY.split(',');
+    if (rep === 'weekly') { const bd = parts.map(x => DMAP[x.slice(-2)]).filter(x => x != null).sort(); if (bd.length) f.byDays = bd; }
+    else if (rep === 'monthly') { const m = parts[0].match(/^([+-]?\d)(\w\w)$/); if (m && DMAP[m[2]] != null) f.nth = { n: +m[1], dow: DMAP[m[2]] }; }
+  }
+  if (P.UNTIL) f.until = `${P.UNTIL.slice(0, 4)}-${P.UNTIL.slice(4, 6)}-${P.UNTIL.slice(6, 8)}`;
+  else if (P.COUNT) {
+    const per = rep === 'weekly' && f.byDays ? f.byDays.length : 1, steps = Math.max(0, Math.ceil(+P.COUNT / per) - 1);
+    f.until = addDays(start, rep === 'daily' ? steps * iv : rep === 'weekly' ? steps * 7 * iv + 6 : rep === 'monthly' ? Math.round(30.44 * steps * iv) + 6 : 366 * steps * iv);
+  }
+  return f;
+}
+function icsToEvents(raw, { mids = [], idp = 'ics-', cutoff = '0000-00-00', max = 400, src } = {}) {
+  const masters = new Map(), out = [];
+  for (const r of raw) if (r.uid && r.rrule && !r.recurId) masters.set(r.uid, r);
+  for (const r of raw) if (r.recurId && masters.has(r.uid)) { const m = masters.get(r.uid); (m.exdates = m.exdates || []).push(r.recurId); }
+  for (const r of raw) {
+    if (r.cancelled && !r.recurId) continue;
+    const rr = r.recurId ? { repeat: 'none' } : rruleFields(r.rrule, r.start.date);
+    const lastDay = rr.repeat === 'none' ? (r.end ? r.end.date : r.start.date) : (rr.until || '9999-12-31');
+    if (lastDay < cutoff || r.cancelled) continue;
+    const e = { title: r.title || 'Untitled', date: r.start.date, allDay: r.start.allDay, memberIds: mids, notes: r.notes || '', ...rr };
+    if (src) e.src = src;
+    if (e.allDay) { if (r.end && r.end.allDay) { const ed = addDays(r.end.date, -1); if (ed > e.date && e.repeat === 'none') e.endDate = ed; } }
+    else { e.start = r.start.time; e.end = r.end && !r.end.allDay && r.end.date === r.start.date && r.end.time > r.start.time ? r.end.time : fromMin(Math.min(toMin(e.start) + 60, 1439)); }
+    if (r.exdates && e.repeat !== 'none') e.exdates = [...new Set(r.exdates)].filter(x => x >= cutoff).sort();
+    out.push([idp + hash((r.uid || (r.title + r.start.date + (r.start.time || ''))) + '|' + (r.recurId || '')), e]);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+function importICS() {
+  openSheet(`<h2>Import a calendar file</h2>
+    <label class="field"><span>Calendar file (.ics)</span><input type="file" id="icsFile" accept=".ics,text/calendar" style="height:auto;padding:10px"></label>
+    <div class="field"><span>Whose calendar is this?</span>${memberPicker([...ui.filter])}</div>
+    <p class="note">Imports events from the last 30 days onward, plus repeating events. Up to 400 events per file. For a calendar that keeps updating, use Subscribe instead.</p>
+    <div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" type="submit" id="icsGo">Import</button></div>`, async f => {
+    const file = f.querySelector('#icsFile').files[0]; if (!file) { toast('Choose an .ics file first'); return; }
+    const rows = icsToEvents(parseICS(await file.text()), { mids: picked(f, 'mem'), cutoff: addDays(today(), -30), src: 'ics' }).map(([id, e]) => ['events', id, e]);
+    if (!rows.length) { toast('No upcoming events found in that file'); return; }
+    const btn = f.querySelector('#icsGo'); btn.disabled = true; btn.textContent = `Importing ${rows.length}…`;
+    const n = await putMany(rows); closeSheet(); toast(`Imported ${n} events`);
+  }, f => wirePick(f, []));
+}
+
+/* ---------- sample data (clearly marked, removable) ---------- */
+async function loadSample() {
+  const t = today(), ids = { a: 'sample-alex', s: 'sample-sam', l: 'sample-liam', v: 'sample-ava' };
+  const X = { sample: true };
+  const rows = [
+    ['members', ids.a, { name: 'Alex', role: 'Parent', color: 'rose', order: 1, ...X }],
+    ['members', ids.s, { name: 'Sam', role: 'Parent', color: 'lime', order: 2, ...X }],
+    ['members', ids.l, { name: 'Liam', role: 'Kid', color: 'sky', order: 3, ...X }],
+    ['members', ids.v, { name: 'Ava', role: 'Kid', color: 'lilac', order: 4, ...X }],
+    ['events', 'sample-e1', { title: 'Camping trip', date: addDays(t, 2), endDate: addDays(t, 3), allDay: true, memberIds: [ids.a, ids.s, ids.l, ids.v], repeat: 'none', ...X }],
+    ['events', 'sample-e2', { title: 'Board meeting', date: t, start: '10:00', end: '11:30', allDay: false, memberIds: [ids.s], repeat: 'none', ...X }],
+    ['events', 'sample-e3', { title: 'School assembly', date: addDays(t, 1), start: '09:15', end: '10:15', allDay: false, memberIds: [ids.l, ids.v], repeat: 'none', ...X }],
+    ['events', 'sample-e4', { title: 'Coffee with Diane', date: addDays(t, 1), start: '11:30', end: '13:00', allDay: false, memberIds: [ids.a], repeat: 'none', ...X }],
+    ['events', 'sample-e5', { title: 'Baby shower', date: t, start: '14:00', end: '17:00', allDay: false, memberIds: [ids.a], repeat: 'none', ...X }],
+    ['events', 'sample-e6', { title: 'Tutoring', date: t, start: '15:00', end: '16:00', allDay: false, memberIds: [ids.v], repeat: 'weekly', ...X }],
+    ['events', 'sample-e7', { title: 'History test', date: addDays(t, 2), start: '10:30', end: '11:30', allDay: false, memberIds: [ids.l], repeat: 'none', ...X }],
+    ['events', 'sample-e8', { title: 'Violin lesson', date: addDays(t, 3), start: '16:00', end: '17:00', allDay: false, memberIds: [ids.v], repeat: 'weekly', ...X }],
+    ['events', 'sample-e9', { title: 'Pest control visit', date: addDays(t, 2), start: '12:15', end: '14:15', allDay: false, memberIds: [ids.s], repeat: 'none', ...X }],
+    ['events', 'sample-e10', { title: 'Garbage day', date: addDays(t, 4), allDay: true, memberIds: [], repeat: 'weekly', ...X }],
+    ['chores', 'sample-c1', { title: 'Make bed', memberId: ids.l, days: [], when: 'morning', stars: 1, ...X }],
+    ['chores', 'sample-c2', { title: 'Feed the dog', memberId: ids.v, days: [], when: 'morning', stars: 2, ...X }],
+    ['chores', 'sample-c3', { title: 'Homework', memberId: ids.l, days: [1, 2, 3, 4], when: 'afternoon', stars: 2, ...X }],
+    ['chores', 'sample-c4', { title: 'Practice violin', memberId: ids.v, days: [], when: 'evening', stars: 2, ...X }],
+    ['chores', 'sample-c5', { title: 'Unload dishwasher', memberId: '', days: [], when: 'evening', stars: 0, ...X }],
+    ['chores', 'sample-c6', { title: 'Plan the week’s meals', memberId: ids.a, days: [0], when: 'any', stars: 0, ...X }],
+    ['completions', doneKey(t, 'sample-c1'), { choreId: 'sample-c1', date: t, memberId: ids.l, stars: 1, at: Date.now(), ...X }],
+    ['rewards', 'sample-r1', { title: 'Pick Friday’s movie', cost: 5, ...X }],
+    ['rewards', 'sample-r2', { title: '30 extra minutes of screen time', cost: 10, ...X }],
+    ['lists', 'sample-l1', { name: 'Groceries', order: 1, ...X }],
+    ['items', 'sample-i1', { listId: 'sample-l1', text: 'Milk', done: false, at: 1, ...X }],
+    ['items', 'sample-i2', { listId: 'sample-l1', text: 'Bananas', done: true, at: 2, ...X }],
+    ['items', 'sample-i3', { listId: 'sample-l1', text: 'Tortillas', done: false, at: 3, ...X }],
+    ['meals', `${t}_dinner`, { date: t, slot: 'dinner', text: 'Taco night', ingredients: 'tortillas, beef, salsa', ...X }],
+    ['meals', `${addDays(t, 1)}_dinner`, { date: addDays(t, 1), slot: 'dinner', text: 'Spaghetti', ingredients: '', ...X }],
+  ];
+  if (!S.settings.has('family')) rows.push(['settings', 'family', { name: 'Sample Family', ...X }]);
+  toast('Loading sample data…');
+  await putMany(rows); toast('Sample data loaded. Remove it any time in Family settings.');
+}
+async function clearSample() {
+  const rows = []; COLS.forEach(c => all(c).forEach(x => { if (x.sample) rows.push([c, x.id]); }));
+  for (const [c, id] of rows) await del(c, id);
+  ui.filter.clear(); toast('Sample data removed');
+}
+
+/* ---------- sleep, wake lock, theme, toast ---------- */
+let wakeLock = null;
+function renderSleep() {
+  const n = new Date(), t = today(), nowM = n.getHours() * 60 + n.getMinutes();
+  let next = null;
+  for (let i = 0; i < 14 && !next; i++) { const d = addDays(t, i); next = eventsOn(d).filter(e => !e.allDay && (i > 0 || toMin(e.start) >= nowM)).map(e => ({ e, d }))[0] || null; }
+  $('#sleep').innerHTML = `<div class="big tn">${fmtT(fromMin(nowM))}</div><div class="sd">${DOWL[n.getDay()]}, ${MON[n.getMonth()]} ${n.getDate()}</div>${next ? `<div class="nx">Next: ${esc(next.e.title)} · ${next.d === t ? 'today' : DOW[pd(next.d).getDay()]} ${fmtT(next.e.start)}</div>` : ''}<div class="nx" style="font-size:13px">Tap anywhere to wake</div>`;
+}
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+
+/* ---------- family settings helper ---------- */
+const famSettings = () => get('settings', 'family') || {};
+function updFamily(patch) { const { id: _i, ...rest } = famSettings(); put('settings', 'family', { ...rest, ...patch, sample: false }); }
+const canon = o => Array.isArray(o) ? `[${o.map(canon).join(',')}]` : o && typeof o === 'object' ? `{${Object.keys(o).sort().map(k => JSON.stringify(k) + ':' + canon(o[k])).join(',')}}` : JSON.stringify(o);
+async function sha256hex(s) { const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join(''); }
+
+/* ---------- parent PIN: kids can check off chores, add events and redeem; parents unlock the rest ---------- */
+let parentUntil = 0, pinFails = 0, pinLockUntil = 0;
+const parentPin = () => famSettings().pin || null;
+const isParent = () => !parentPin() || lsGet('kb-parent-device', false) || Date.now() < parentUntil;
+function withParent(why, fn) { if (isParent()) return fn(); pinPad(why, fn); }
+async function pinMatches(val, pin) { return !!pin && (await sha256hex(`${pin.salt}|${val}`)) === pin.hash; }
+function pinPad(why, onOk) {
+  const pin = parentPin(); let val = '';
+  const draw = () => { const d = $('#pinDots'); if (d) d.innerHTML = Array.from({ length: Math.max(pin.len || 4, val.length) }, (_, i) => `<i class="${i < val.length ? 'on' : ''}"></i>`).join(''); };
+  const say = t => { const m = $('#pinMsg'); if (m) m.textContent = t; };
+  const tryPin = async () => {
+    if (pinLockUntil > Date.now()) { say(`Too many tries. Wait ${Math.ceil((pinLockUntil - Date.now()) / 1000)} seconds.`); return; }
+    if (await pinMatches(val, pin)) {
+      pinFails = 0; parentUntil = Date.now() + 5 * 60e3;
+      if ($('#pinKeep') && $('#pinKeep').checked) lsSet('kb-parent-device', true);
+      closeSheet(); onOk();
+    } else {
+      pinFails++; val = ''; draw();
+      const pad = $('.pinpad'); if (pad) { pad.classList.remove('shake'); void pad.offsetWidth; pad.classList.add('shake'); }
+      if (pinFails >= 5) { pinLockUntil = Date.now() + 30e3; pinFails = 0; say('Too many tries. Wait 30 seconds.'); } else say('Wrong PIN. Try again.');
+    }
+  };
+  openSheet(`<h2>Parent PIN</h2><p class="note">Enter the parent PIN to ${esc(why)}.</p>
+    <div class="pindots tn" id="pinDots" aria-hidden="true"></div>
+    <div class="pinpad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" data-k="${n}">${n}</button>`).join('')}<button type="button" data-k="back" aria-label="Delete digit">⌫</button><button type="button" data-k="0">0</button><button type="submit" class="ok" aria-label="Unlock">✓</button></div>
+    <label class="check"><input type="checkbox" id="pinKeep"> Keep this device unlocked (a parent's own phone)</label>
+    <p class="note" id="pinMsg" role="status"></p>
+    <div class="actions"><button type="button" class="btn" data-act="close">Cancel</button></div>`, () => tryPin(), f => {
+    draw();
+    f.querySelector('.pinpad').addEventListener('click', e => {
+      const b = e.target.closest('[data-k]'); if (!b) return;
+      if (b.dataset.k === 'back') val = val.slice(0, -1); else if (val.length < 8) val += b.dataset.k;
+      draw(); if (pin.len && val.length === pin.len) tryPin();
+    });
+    f.addEventListener('keydown', e => { if (/^\d$/.test(e.key) && val.length < 8) { val += e.key; draw(); if (pin.len && val.length === pin.len) tryPin(); } else if (e.key === 'Backspace') { val = val.slice(0, -1); draw(); } });
+    f.tabIndex = -1; f.focus();
+  });
+}
+function setPinSheet() {
+  openSheet(`<h2>${parentPin() ? 'Change' : 'Set'} parent PIN</h2>
+    <p class="note">4 to 8 digits. With a PIN, kids can still check off chores, add events and redeem rewards. Opening Family settings, editing chores, rewards and people, changing stars and deleting events need the PIN.</p>
+    <label class="field"><span>New PIN</span><input type="password" id="pin1" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="off" required></label>
+    <label class="field"><span>Type it again</span><input type="password" id="pin2" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="off" required></label>
+    <p class="note" id="pinSetMsg" role="status"></p>
+    ${actions(false)}`, async f => {
+    const a = f.querySelector('#pin1').value, b = f.querySelector('#pin2').value;
+    if (!/^\d{4,8}$/.test(a)) { $('#pinSetMsg').textContent = 'Use 4 to 8 digits.'; return; }
+    if (a !== b) { $('#pinSetMsg').textContent = 'The two PINs don’t match.'; return; }
+    const salt = uid() + uid();
+    updFamily({ pin: { salt, hash: await sha256hex(`${salt}|${a}`), len: a.length } });
+    parentUntil = Date.now() + 5 * 60e3; closeSheet(); toast('Parent PIN saved');
+  });
+}
+
+/* ---------- star adjustments (parents) ---------- */
+function adjustStars(mid) {
+  const m = member(mid); if (!m) return;
+  openSheet(`<h2>Adjust ${esc(m.name)}'s stars</h2>
+    <p class="note">Current balance ★ ${starBalance(mid).bal}. Use a negative number to take stars away.</p>
+    <div class="two"><label class="field"><span>Stars</span><input type="number" id="adjN" min="-500" max="500" step="1" value="5" required></label>
+    <label class="field"><span>Reason</span><input type="text" id="adjWhy" placeholder="Helped with groceries" maxlength="80"></label></div>
+    ${actions(false)}`, f => {
+    const n = Math.max(-500, Math.min(500, Math.round(Number(f.querySelector('#adjN').value) || 0))); if (!n) return;
+    const why = f.querySelector('#adjWhy').value.trim() || (n > 0 ? 'Bonus stars' : 'Stars removed');
+    put('redemptions', uid(), { memberId: mid, title: why, cost: -n, adjust: true, at: Date.now() });
+    closeSheet(); toast(`${n > 0 ? '+' : ''}${n} ★ for ${m.name}`);
+  });
+}
+
+/* ---------- weather (Open-Meteo, no key) ---------- */
+const WX = { 0: ['☀️', 'Clear'], 1: ['🌤️', 'Mostly clear'], 2: ['⛅', 'Partly cloudy'], 3: ['☁️', 'Cloudy'], 45: ['🌫️', 'Fog'], 48: ['🌫️', 'Fog'], 51: ['🌦️', 'Drizzle'], 53: ['🌦️', 'Drizzle'], 55: ['🌦️', 'Drizzle'], 56: ['🌧️', 'Freezing drizzle'], 57: ['🌧️', 'Freezing drizzle'], 61: ['🌧️', 'Rain'], 63: ['🌧️', 'Rain'], 65: ['🌧️', 'Heavy rain'], 66: ['🌧️', 'Freezing rain'], 67: ['🌧️', 'Freezing rain'], 71: ['🌨️', 'Snow'], 73: ['🌨️', 'Snow'], 75: ['❄️', 'Heavy snow'], 77: ['🌨️', 'Snow grains'], 80: ['🌦️', 'Showers'], 81: ['🌧️', 'Showers'], 82: ['⛈️', 'Heavy showers'], 85: ['🌨️', 'Snow showers'], 86: ['🌨️', 'Snow showers'], 95: ['⛈️', 'Thunderstorm'], 96: ['⛈️', 'Thunderstorm'], 99: ['⛈️', 'Thunderstorm'] };
+let wxData = lsGet('kb-wx', null), wxBusy = false;
+async function refreshWeather(force) {
+  const w = famSettings().weather; if (!w || wxBusy) return;
+  const key = `${w.lat},${w.lon},${w.unit}`;
+  if (!force && wxData && wxData.key === key && Date.now() - wxData.at < 30 * 60e3) return;
+  wxBusy = true;
+  try {
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${w.lat}&longitude=${w.lon}&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2${w.unit === 'C' ? '' : '&temperature_unit=fahrenheit'}`;
+    const r = await fetch(u); if (!r.ok) throw 0;
+    const j = await r.json();
+    wxData = { key, at: Date.now(), now: { t: Math.round(j.current.temperature_2m), code: j.current.weather_code, day: j.current.is_day }, today: { hi: Math.round(j.daily.temperature_2m_max[0]), lo: Math.round(j.daily.temperature_2m_min[0]), code: j.daily.weather_code[0], rain: j.daily.precipitation_probability_max[0] } };
+    lsSet('kb-wx', wxData); renderTop(); if (ui.tab === 'today') queueRender();
+  } catch {} finally { wxBusy = false; }
+}
+const wxIcon = (code, day = 1) => (code === 0 && !day ? '🌙' : (WX[code] || ['🌡️'])[0]);
+function wxBadge() {
+  const w = famSettings().weather; if (!w || !wxData || wxData.key !== `${w.lat},${w.lon},${w.unit}`) return '';
+  return `<span class="wx tn" title="${esc((WX[wxData.now.code] || [, ''])[1])} in ${esc(w.place)}">${wxIcon(wxData.now.code, wxData.now.day)} ${wxData.now.t}°</span>`;
+}
+function wxToday() {
+  const w = famSettings().weather; if (!w || !wxData || wxData.key !== `${w.lat},${w.lon},${w.unit}`) return '';
+  const d = wxData.today;
+  return `<span class="wxday tn">${wxIcon(d.code)} ${esc((WX[d.code] || [, ''])[1])} · High ${d.hi}° · Low ${d.lo}°${d.rain != null ? ` · ${d.rain}% rain` : ''}</span>`;
+}
+function weatherSheet() {
+  const w = famSettings().weather || {};
+  openSheet(`<h2>Weather</h2><p class="note">Shows the temperature in the header and today's forecast on the Today screen. Forecasts come from Open-Meteo.</p>
+    <div class="additem"><input type="text" id="wxQ" placeholder="Town or city" value="${esc(w.place || '')}" aria-label="Town or city"><button type="button" class="btn" id="wxFind">Search</button></div>
+    <div id="wxRes" class="pick" style="flex-direction:column;align-items:stretch"></div>
+    <div class="field"><span>Units</span><div class="pick" data-pick="unit"><button type="button" data-v="F" aria-pressed="${w.unit !== 'C'}">°F</button><button type="button" data-v="C" aria-pressed="${w.unit === 'C'}">°C</button></div></div>
+    <div class="actions">${w.place ? '<button type="button" class="btn danger" data-del>Turn off weather</button>' : ''}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" type="submit">Save</button></div>`, f => {
+    const sel = f.querySelector('#wxRes [aria-pressed="true"]'), unit = picked(f, 'unit')[0] || 'F';
+    const loc = sel ? JSON.parse(sel.dataset.loc) : (w.place ? { lat: w.lat, lon: w.lon, place: w.place } : null);
+    if (!loc) { toast('Search for your town and pick it first'); return; }
+    updFamily({ weather: { ...loc, unit } }); closeSheet(); setTimeout(() => refreshWeather(true), 50); toast(`Weather for ${loc.place}`);
+  }, f => {
+    wirePick(f, ['unit']);
+    const find = async () => {
+      const q = f.querySelector('#wxQ').value.trim(); if (q.length < 2) return;
+      const box = f.querySelector('#wxRes'); box.innerHTML = '<p class="note">Searching…</p>';
+      try {
+        const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=5&language=en&name=${encodeURIComponent(q)}`); const j = await r.json();
+        const res = (j.results || []).map(x => ({ lat: +x.latitude.toFixed(3), lon: +x.longitude.toFixed(3), place: [x.name, x.admin1, x.country_code].filter(Boolean).join(', ') }));
+        box.innerHTML = res.length ? res.map((x, i) => `<button type="button" data-v="${i}" data-loc="${esc(JSON.stringify(x))}" aria-pressed="${i === 0}">${esc(x.place)}</button>`).join('') : '<p class="note">No places found.</p>';
+        box.dataset.pick = 'loc'; wirePick(f, ['unit', 'loc']);
+      } catch { box.innerHTML = '<p class="note">Could not search right now. Check the connection.</p>'; }
+    };
+    f.querySelector('#wxFind').onclick = find;
+    f.querySelector('#wxQ').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); find(); } });
+    armDelete(f, () => { updFamily({ weather: null }); wxData = null; lsSet('kb-wx', null); });
+  });
+}
+
+/* ---------- calendar subscriptions (Google / Apple / Outlook secret iCal links) ---------- */
+async function syncFeed(f) {
+  const r = await fetch(`${CFG.url}/functions/v1/kb-ics`, { method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ code: famCode, url: f.url }) });
+  if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(({ bad_url: 'That link is not a valid https or webcal address', not_a_calendar: 'That link is not a calendar', calendar_too_large: 'That calendar is too large', fetch_failed: 'The calendar could not be reached' })[j.error] || (j.error && j.error.startsWith('calendar_http_') ? `The calendar server said ${j.error.slice(14)}` : 'Sync failed')); }
+  const evs = icsToEvents(parseICS(await r.text()), { mids: f.memberIds || [], idp: `feed-${f.id}-`, cutoff: addDays(today(), -30), max: 1000 });
+  const keep = new Set(), rows = [];
+  for (const [id, e] of evs) { e.feed = f.id; keep.add(id); const cur = S.events.get(id); if (!cur || canon(cur) !== canon(e)) rows.push(['events', id, e]); }
+  const gone = all('events').filter(e => e.feed === f.id && !keep.has(e.id));
+  if (rows.length) await putMany(rows);
+  for (const e of gone) del('events', e.id);
+  return { n: evs.length, changed: rows.length + gone.length };
+}
+let feedsBusy = false;
+async function syncFeeds(force) {
+  if (mode !== 'cloud' || feedsBusy) return;
+  feedsBusy = true;
+  try {
+    for (const f of all('feeds')) {
+      const st = lsGet(`kb-feed-${f.id}`, {});
+      if (!force && st.at && Date.now() - st.at < 30 * 60e3) continue;
+      try { const r = await syncFeed(f); lsSet(`kb-feed-${f.id}`, { at: Date.now(), ok: true, n: r.n }); }
+      catch (e) { lsSet(`kb-feed-${f.id}`, { at: Date.now(), ok: false, err: e.message }); }
+    }
+  } finally { feedsBusy = false; if (ui.tab === 'settings') queueRender(); }
+}
+setInterval(() => { if (document.visibilityState === 'visible') syncFeeds(false); }, 5 * 60e3);
+function feedSheet(id) {
+  const fd = id ? get('feeds', id) : { name: '', url: '', memberIds: [...ui.filter] };
+  openSheet(`<h2>${id ? 'Edit calendar' : 'Subscribe to a calendar'}</h2>
+    <p class="note"><b>Google:</b> Google Calendar on a computer → Settings → pick the calendar → Integrate calendar → copy “Secret address in iCal format”.<br><b>Apple:</b> Calendar app → tap ⓘ next to a calendar → turn on Public Calendar → Share Link.<br><b>Outlook:</b> Settings → Calendar → Shared calendars → Publish → copy the ICS link.</p>
+    <label class="field"><span>Name</span><input type="text" id="fdName" required maxlength="40" value="${esc(fd.name)}" placeholder="Dad's work"></label>
+    <label class="field"><span>Calendar link</span><input type="text" id="fdUrl" required value="${esc(fd.url)}" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <div class="field"><span>Whose events are these?</span>${memberPicker(fd.memberIds || [])}</div>
+    <p class="note">Kinboard checks for changes every 30 minutes. Events from this calendar are read-only here; change them in the original calendar. Anyone in your family can see this link.</p>
+    ${actions(!!id)}`, async f => {
+    const name = f.querySelector('#fdName').value.trim(), url = f.querySelector('#fdUrl').value.trim();
+    if (!name || !/^(https|webcals?):\/\//i.test(url)) { toast('Paste a link that starts with https:// or webcal://'); return; }
+    const fid = id || uid(), doc = { name, url, memberIds: picked(f, 'mem') };
+    put('feeds', fid, doc); closeSheet(); toast(`Syncing ${name}…`);
+    try { const r = await syncFeed({ id: fid, ...doc }); lsSet(`kb-feed-${fid}`, { at: Date.now(), ok: true, n: r.n }); toast(`${name}: ${r.n} events synced`); }
+    catch (e) { lsSet(`kb-feed-${fid}`, { at: Date.now(), ok: false, err: e.message }); toast(`${name}: ${e.message}`); }
+    queueRender();
+  }, f => { wirePick(f, []); armDelete(f, () => { del('feeds', id); all('events').filter(e => e.feed === id).forEach(e => del('events', e.id)); toast('Calendar removed'); }); });
+}
+function feedEventInfo(e, day) {
+  const fd = get('feeds', e.feed) || { name: 'a subscribed calendar' }, d = pd(day || e.date);
+  openSheet(`<h2>${esc(e.title)}</h2><p>${DOWL[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()} · ${fmtRange(e)}</p>${e.notes ? `<p class="note">${esc(e.notes)}</p>` : ''}
+    <p class="note">From <b>${esc(fd.name)}</b>. Change it in that calendar and Kinboard updates within 30 minutes.</p>
+    <div class="actions"><button type="button" class="btn primary" data-act="close">Close</button></div>`, () => closeSheet());
+}
+
+/* ---------- photos: stored per family on the server, cached on each screen ---------- */
+const photoURLs = new Map();
+const photoKey = id => { try { return new Request(new URL('./__kb_photo/' + encodeURIComponent(id), location.href).href); } catch { return null; } };
+async function photoURL(id) {
+  if (photoURLs.has(id)) return photoURLs.get(id);
+  let blob = null; const key = photoKey(id);
+  try { if (window.caches && key) { const c = await caches.open('kb-photos'); const hit = await c.match(key); if (hit) blob = await hit.blob(); } } catch {}
+  if (!blob) {
+    const rows = await rpc('kb_photo_get', { code: famCode, photo_id: id }); if (!rows || !rows.length) return null;
+    const bin = atob(rows[0].b64), arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    blob = new Blob([arr], { type: rows[0].mime });
+    try { if (window.caches && key) { const c = await caches.open('kb-photos'); await c.put(key, new Response(blob)); } } catch {}
+  }
+  const u = URL.createObjectURL(blob); photoURLs.set(id, u); return u;
+}
+async function shrinkPhoto(file) {
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+  for (const [max, q] of [[1920, 0.82], [1600, 0.78], [1280, 0.72], [1024, 0.68]]) {
+    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight)), w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h);
+    const b64 = cv.toDataURL('image/jpeg', q).split(',')[1];
+    if (b64.length * 0.75 < 580000) { URL.revokeObjectURL(img.src); return { b64, w, h }; }
+  }
+  throw new Error('too_large');
+}
+async function uploadPhotos(files) {
+  if (mode !== 'cloud') { toast('Turn on family sync to add photos.'); return; }
+  let ok = 0;
+  for (const file of [...files].slice(0, 30)) {
+    if (!/^image\//.test(file.type)) continue;
+    toast(`Adding photo ${ok + 1}…`);
+    try { const p = await shrinkPhoto(file), id = uid(); await rpc('kb_photo_put', { code: famCode, photo_id: id, mime: 'image/jpeg', b64: p.b64 }); put('photos', id, { w: p.w, h: p.h, at: Date.now() }); ok++; }
+    catch (e) { toast(/too_many/.test(e.message || '') ? 'Photo limit reached (300).' : 'One photo could not be added.'); }
+  }
+  toast(`Added ${ok} photo${ok === 1 ? '' : 's'}`);
+}
+async function deletePhoto(id) {
+  try { await rpc('kb_photo_del', { code: famCode, photo_id: id }); } catch {}
+  del('photos', id);
+  try { const key = photoKey(id); if (window.caches && key) (await caches.open('kb-photos')).delete(key); } catch {}
+}
+async function fillThumbs() {
+  for (const img of document.querySelectorAll('img[data-photo]')) { if (img.src) continue; try { const u = await photoURL(img.dataset.photo); if (u) img.src = u; } catch {} }
+}
+
+/* Photo screensaver on the wall display */
+let saverT = null, saverOrder = [], saverIdx = 0;
+const saverOn = () => !$('#saver').hidden;
+async function showSaver() {
+  const ids = all('photos').map(p => p.id); if (!ids.length) return;
+  saverOrder = ids.sort(() => Math.random() - 0.5); saverIdx = 0;
+  const sv = $('#saver'); sv.hidden = false; sv.innerHTML = `<img alt="" class="a"><img alt="" class="b"><div class="saver-info"><div class="big tn" id="saverClock"></div><div id="saverSub"></div></div>`;
+  await nextSlide(); clearInterval(saverT); saverT = setInterval(nextSlide, 12000);
+}
+async function nextSlide() {
+  const sv = $('#saver'); if (sv.hidden) return;
+  const n = new Date(), nowM = n.getHours() * 60 + n.getMinutes();
+  const ck = $('#saverClock'); if (ck) ck.textContent = fmtT(fromMin(nowM));
+  const nx = allEventsOn(today()).find(e => !e.allDay && toMin(e.start) >= nowM);
+  const sub = $('#saverSub'); if (sub) sub.textContent = `${DOWL[n.getDay()]}, ${MON[n.getMonth()]} ${n.getDate()}${wxData ? ` · ${wxIcon(wxData.now.code, wxData.now.day)} ${wxData.now.t}°` : ''}${nx ? ` · Next: ${nx.title} at ${fmtT(nx.start)}` : ''}`;
+  const id = saverOrder[saverIdx++ % saverOrder.length];
+  try {
+    const u = await photoURL(id); if (!u || sv.hidden) return;
+    const imgs = sv.querySelectorAll('img'), cur = sv.querySelector('img.show'), nxt = cur === imgs[0] ? imgs[1] : imgs[0];
+    nxt.onload = () => { nxt.classList.add('show'); if (cur) cur.classList.remove('show'); };
+    nxt.src = u;
+  } catch {}
+}
+function hideSaver() { const sv = $('#saver'); if (sv.hidden) return; sv.hidden = true; sv.innerHTML = ''; clearInterval(saverT); }
+
+/* ---------- celebrations ----------
+   One entry point, celebrate(ev). Events are queued and played one at a time, and are also
+   broadcast to the family's other open screens over the same Realtime channel used for sync. */
+const CEL_TYPES = ['chore', 'allDone', 'milestone', 'redeem', 'familyDone'];
+const MILESTONES = [10, 25, 50, 100, 250, 500, 1000];
+const DEVICE = uid();
+const Cel = { q: [], busy: false, seen: new Set(), log: [] };
+window.__kbCel = Cel; // read by the test harness; harmless in production
+const celLevel = () => lsGet('kb-cel-level', 'full'); // full | subtle | off
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+const frames = (n = 2) => new Promise(r => { const f = () => (--n <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+function nightActive() {
+  const sl = document.getElementById('sleep');
+  if (sl && !sl.hidden) return true;
+  return typeof wall !== 'undefined' && wall.on && wall.nightOn && inNight();
+}
+
+/* Colors: person colors are backgrounds; text is black or white, whichever has more contrast (WCAG AA). */
+function toRGB(s) {
+  s = String(s || '').trim();
+  if (s[0] === '#') { const h = s.length === 4 ? s.slice(1).split('').map(c => c + c).join('') : s.slice(1, 7); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
+  const m = s.match(/[\d.]+/g); return m ? m.slice(0, 3).map(Number) : [128, 128, 128];
+}
+const lum = rgb => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]); };
+const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+function textOn(bg) { const rgb = toRGB(bg), dark = [11, 18, 16], light = [255, 255, 255]; return contrast(rgb, dark) >= contrast(rgb, light) ? '#0B1210' : '#FFFFFF'; }
+function personLook(pid, fallbackName) {
+  const m = pid ? member(pid) : null;
+  const probe = document.createElement('span'); probe.className = `m c-${m ? m.color : 'slate'}`; probe.hidden = true; document.body.appendChild(probe);
+  const cs = getComputedStyle(probe), soft = cs.getPropertyValue('--mb').trim(), strong = cs.getPropertyValue('--mi').trim();
+  probe.remove();
+  return { name: m ? m.name : (String(fallbackName || '').slice(0, 40) || 'Family'), soft, strong, text: textOn(strong), confetti: [strong, soft, '#F2C14E', '#FFFFFF'] };
+}
+
+/* Confetti: one shared canvas, capped at 80 particles, torn down when the last particle settles. */
+const FX = (() => {
+  let cv = null, ctx = null, parts = [], raf = 0, last = 0;
+  function ensure() {
+    if (cv) return;
+    cv = document.createElement('canvas'); cv.className = 'fx-canvas'; cv.setAttribute('aria-hidden', 'true');
+    const dpr = Math.min(devicePixelRatio || 1, 1.5);
+    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    document.body.appendChild(cv); ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function burst({ x, y, n = 30, colors, angle = -Math.PI / 2, spread = Math.PI * 1.6, speed = [5, 11] }) {
+    ensure();
+    for (let i = 0; i < n; i++) {
+      const a = angle + (Math.random() - 0.5) * spread, v = speed[0] + Math.random() * (speed[1] - speed[0]);
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.3, w: 6 + Math.random() * 6, h: 4 + Math.random() * 4, c: colors[i % colors.length], t: 0, max: 70 + Math.random() * 45 });
+    }
+    if (parts.length > 80) parts.splice(0, parts.length - 80);
+    if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
+  }
+  function tick(now) {
+    const dt = Math.min(2.5, (now - last) / 16.67); last = now;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    parts = parts.filter(p => p.t < p.max && p.y < innerHeight + 30);
+    for (const p of parts) {
+      p.vx *= Math.pow(0.985, dt); p.vy = p.vy * Math.pow(0.985, dt) + 0.24 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt; p.t += dt;
+      ctx.globalAlpha = Math.max(0, Math.min(1, (p.max - p.t) / (p.max * 0.3)));
+      ctx.fillStyle = p.c; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.r * 1.7)) + 1); ctx.restore();
+    }
+    if (parts.length) raf = requestAnimationFrame(tick);
+    else { raf = 0; cv.remove(); cv = null; ctx = null; }
+  }
+  function clear() { parts = []; if (raf) cancelAnimationFrame(raf); raf = 0; if (cv) { cv.remove(); cv = null; } }
+  return { burst, clear, active: () => !!cv };
+})();
+
+/* Sound: short WebAudio chimes, no files. Off by default; never during night-clock hours. */
+let actx = null;
+addEventListener('pointerdown', () => { if (actx && actx.state === 'suspended') actx.resume().catch(() => {}); }, { passive: true });
+function chime(kind) {
+  if (!lsGet('kb-cel-sound', false) || (typeof wall !== 'undefined' && wall.on && wall.nightOn && inNight())) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    actx = actx || new AC(); if (actx.state === 'suspended') actx.resume().catch(() => {});
+    const notes = { chore: [1046.5, 1568], allDone: [784, 988, 1175, 1568], milestone: [659, 784, 988, 1319], redeem: [523, 659, 784, 1047, 1319], familyDone: [523, 784, 1047, 1319, 1568] }[kind] || [1046.5];
+    notes.forEach((f, i) => {
+      const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + i * 0.09;
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.45);
+    });
+  } catch {}
+}
+
+function celText(ev, who) {
+  switch (ev.type) {
+    case 'chore': return `${who} finished ${ev.title || 'a chore'}${ev.stars ? `, plus ${ev.stars} star${ev.stars > 1 ? 's' : ''}` : ''}.`;
+    case 'allDone': return `${who} finished every chore today!${ev.streak >= 2 ? ` ${ev.streak} day streak 🔥` : ''}`;
+    case 'milestone': return `${who} hit ${ev.milestone} stars!`;
+    case 'redeem': return `${who} redeemed ${ev.title} for ${ev.cost} stars.`;
+    case 'familyDone': return 'Everyone finished today’s chores!';
+  }
+  return '';
+}
+function announce(text) { const a = document.getElementById('announce'); if (!a) return; a.textContent = ''; setTimeout(() => { a.textContent = text; }, 30); }
+
+const visible = el => { if (!el) return null; const r = el.getBoundingClientRect(); return r.width && r.bottom > 0 && r.top < innerHeight ? r : null; };
+const centerOf = r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+function originFor(ev) {
+  const sel = ev.choreId ? document.querySelector(`[data-act="chore-toggle"][data-id="${CSS.escape(ev.choreId)}"] .tick`) : null;
+  const r = visible(sel) || visible(ev.personId ? document.querySelector(`[data-person="${CSS.escape(ev.personId)}"]`) : null);
+  return { el: sel, pt: r ? centerOf(r) : { x: innerWidth / 2, y: innerHeight * 0.35 } };
+}
+function starTarget(pid) {
+  if (!pid) return null;
+  return [...document.querySelectorAll(`[data-stars="${CSS.escape(pid)}"]`)].find(visible) || null;
+}
+function countUp(el, from, to) {
+  if (!el) return;
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  const t0 = performance.now(), dur = 500;
+  const step = now => { const k = Math.min(1, (now - t0) / dur); el.textContent = `★ ${Math.round(from + (to - from) * k)}`; if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function flyStar(from, toEl, look) {
+  return new Promise(res => {
+    const s = document.createElement('span'); s.className = 'fly-star'; s.textContent = '★'; s.setAttribute('aria-hidden', 'true');
+    s.style.left = `${from.x}px`; s.style.top = `${from.y}px`; document.body.appendChild(s);
+    const r = visible(toEl), to = r ? centerOf(r) : { x: from.x, y: from.y - 120 };
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const a = s.animate([
+      { transform: 'translate(-50%,-50%) scale(.6)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${dx * 0.45}px), calc(-50% + ${dy * 0.45 - 70}px)) scale(1.5)`, opacity: 1, offset: 0.45 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(.7)`, opacity: r ? 1 : 0 },
+    ], { duration: 650, easing: 'cubic-bezier(.45,0,.3,1)' });
+    a.onfinish = () => { s.remove(); res(); };
+  });
+}
+function banner(look, text, sub, ms) {
+  const b = document.createElement('div'); b.className = 'cel-banner'; b.setAttribute('aria-hidden', 'true');
+  b.style.background = look.strong; b.style.color = look.text;
+  const t = document.createElement('b'); t.textContent = text; b.appendChild(t);
+  if (sub) { const s = document.createElement('span'); s.textContent = sub; b.appendChild(s); }
+  document.body.appendChild(b);
+  setTimeout(() => { b.classList.add('out'); setTimeout(() => b.remove(), 300); }, ms);
+  return b;
+}
+function flash(look, text, ms = 1200) { // reduced-motion treatment: a still colour wash plus the words
+  const f = document.createElement('div'); f.className = 'cel-flash'; f.style.background = look.strong; f.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(f); setTimeout(() => f.remove(), 600);
+  const b = banner(look, text, '', ms); b.classList.add('still');
+}
+
+const PLAY = {
+  async chore(ev, look, subtle) {
+    await frames(2); // let the re-render that marked the chore done land first
+    const o = originFor(ev);
+    if (o.el) { o.el.classList.remove('spring'); void o.el.offsetWidth; o.el.classList.add('spring'); }
+    if (ev.local && navigator.vibrate) try { navigator.vibrate(30); } catch {}
+    chime('chore');
+    if (reducedMotion()) { flash(look, celText(ev, look.name)); await sleepMs(1200); return; }
+    FX.burst({ x: o.pt.x, y: o.pt.y, n: subtle ? 14 : 32, colors: look.confetti, speed: subtle ? [3, 7] : [4, 10] });
+    const target = starTarget(ev.personId);
+    if (ev.stars && ev.personId) { await flyStar(o.pt, target, look); countUp(target, (ev.newBal ?? ev.stars) - ev.stars, ev.newBal ?? ev.stars); }
+    else if (!visible(o.el)) banner(look, celText(ev, look.name), '', 1000);
+    await sleepMs(550);
+  },
+  async allDone(ev, look, subtle) {
+    await frames(2);
+    chime('allDone');
+    const sub = ev.streak >= 2 ? `${ev.streak} day streak 🔥` : '';
+    if (reducedMotion()) { flash(look, `${look.name} is all done today!`, 2000); await sleepMs(2000); return; }
+    const col = document.querySelector(`[data-person="${CSS.escape(ev.personId)}"]`), r = visible(col);
+    if (col) { col.classList.remove('cel-glow'); void col.offsetWidth; col.classList.add('cel-glow'); setTimeout(() => col.classList.remove('cel-glow'), 2000); const ad = col.querySelector('.alldone'); if (ad) { ad.classList.remove('cel-in'); void ad.offsetWidth; ad.classList.add('cel-in'); } }
+    const p = r ? { x: r.left + r.width / 2, y: r.top + 40 } : { x: innerWidth / 2, y: innerHeight * 0.3 };
+    FX.burst({ x: p.x, y: p.y, n: subtle ? 24 : 60, colors: look.confetti, speed: [6, 13] });
+    banner(look, `${look.name} is all done today!`, sub, 1900);
+    await sleepMs(2000);
+  },
+  async milestone(ev, look, subtle) {
+    chime('milestone');
+    if (reducedMotion()) { flash(look, celText(ev, look.name), 2500); await sleepMs(2500); return; }
+    banner(look, celText(ev, look.name), 'Star milestone', 2400).classList.add('big');
+    const y = 70 + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0);
+    FX.burst({ x: innerWidth * 0.2, y, n: subtle ? 12 : 36, colors: look.confetti, angle: -Math.PI / 4, spread: Math.PI / 2, speed: [6, 12] });
+    FX.burst({ x: innerWidth * 0.8, y, n: subtle ? 12 : 36, colors: look.confetti, angle: -3 * Math.PI / 4, spread: Math.PI / 2, speed: [6, 12] });
+    await sleepMs(2500);
+  },
+  async familyDone(ev, look, subtle) {
+    const fam = { ...look, name: familyName() };
+    chime('familyDone');
+    if (reducedMotion()) { flash(fam, celText(ev), 2500); await sleepMs(2500); return; }
+    banner(fam, celText(ev), familyName(), 2400).classList.add('big');
+    FX.burst({ x: innerWidth / 2, y: innerHeight * 0.45, n: subtle ? 30 : 80, colors: ['#F8D5E0', '#D7EBA3', '#CDE7EF', '#DFD5F6', '#FADEC6', '#F2C14E'], spread: Math.PI * 2, speed: [6, 14] });
+    await sleepMs(2500);
+  },
+  async redeem(ev, look, subtle) {
+    chime('redeem');
+    if (subtle && !reducedMotion()) { banner(look, celText(ev, look.name), '', 2400).classList.add('big'); FX.burst({ x: innerWidth / 2, y: 90, n: 24, colors: look.confetti, speed: [4, 9] }); await sleepMs(2500); return; }
+    const ov = document.createElement('div'); ov.className = 'cel-overlay'; ov.setAttribute('role', 'button'); ov.tabIndex = 0;
+    ov.style.background = look.strong; ov.style.color = look.text;
+    const parts = [['who', look.name + ' redeemed'], ['what', ev.title || 'a reward'], ['cost', `★ ${ev.cost}`], ['hint', 'Tap to close']];
+    for (const [cls, txt] of parts) { const d = document.createElement('div'); d.className = cls; d.textContent = txt; ov.appendChild(d); }
+    if (reducedMotion()) ov.classList.add('still');
+    document.body.appendChild(ov);
+    if (!reducedMotion()) {
+      FX.burst({ x: 0, y: 0, n: 40, colors: look.confetti.concat(['#F2C14E']), angle: Math.PI / 4, spread: Math.PI / 2.2, speed: [8, 16] });
+      FX.burst({ x: innerWidth, y: 0, n: 40, colors: look.confetti.concat(['#F2C14E']), angle: 3 * Math.PI / 4, spread: Math.PI / 2.2, speed: [8, 16] });
+    }
+    await new Promise(res => {
+      let done = false;
+      const close = () => { if (done) return; done = true; ov.classList.add('out'); setTimeout(() => { ov.remove(); res(); }, 250); };
+      ov.addEventListener('click', e => { e.stopPropagation(); close(); });
+      ov.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') close(); });
+      setTimeout(close, 3000);
+      Cel.closeCurrent = close;
+    });
+    Cel.closeCurrent = null;
+  },
+};
+
+function celebrate(ev) {
+  if (!ev || !CEL_TYPES.includes(ev.type) || !ev.id || Cel.seen.has(ev.id)) return;
+  Cel.seen.add(ev.id); if (Cel.seen.size > 500) Cel.seen = new Set([...Cel.seen].slice(-200));
+  const look = personLook(ev.personId, ev.name);
+  announce(celText(ev, look.name));
+  if (celLevel() === 'off' || nightActive()) { Cel.log.push({ type: ev.type, skipped: celLevel() === 'off' ? 'off' : 'night' }); return; }
+  hideSaver();
+  Cel.q.push(ev); if (Cel.q.length > 8) Cel.q.splice(0, Cel.q.length - 8);
+  if (!Cel.busy) runNext();
+}
+async function runNext() {
+  const ev = Cel.q.shift();
+  if (!ev) { Cel.busy = false; return; }
+  Cel.busy = true;
+  if (nightActive()) { celStop(); Cel.busy = false; return; } // the night clock came on: drop the rest
+  const entry = { type: ev.type, id: ev.id, start: performance.now() };
+  try { await PLAY[ev.type](ev, personLook(ev.personId, ev.name), celLevel() === 'subtle'); } catch (e) { entry.error = String(e); }
+  entry.end = performance.now(); Cel.log.push(entry);
+  runNext();
+}
+function celStop() { // night clock or "Off": end everything on screen now
+  Cel.q.length = 0; FX.clear();
+  document.querySelectorAll('.cel-banner,.cel-flash,.fly-star').forEach(n => n.remove());
+  if (Cel.closeCurrent) Cel.closeCurrent();
+}
+function emitCelebrations(list) {
+  for (const e of list) {
+    const ev = { ...e, id: uid(), from: DEVICE, name: e.personId ? (member(e.personId) || {}).name : '' };
+    celebrate({ ...ev, local: true });
+    if (mode === 'cloud') live.send('celebrate', ev);
+  }
+}
+function onRemoteCelebrate(p) {
+  if (!p || typeof p !== 'object' || p.from === DEVICE) return;
+  const ev = { id: String(p.id || '').slice(0, 40), type: String(p.type || ''), personId: String(p.personId || '').slice(0, 200), name: String(p.name || '').slice(0, 40),
+    choreId: String(p.choreId || '').slice(0, 200), title: String(p.title || '').slice(0, 120), stars: Math.max(0, Math.min(1000, Number(p.stars) || 0)),
+    newBal: Number.isFinite(Number(p.newBal)) ? Number(p.newBal) : undefined, streak: Math.max(0, Math.min(3650, Number(p.streak) || 0)),
+    milestone: Number(p.milestone) || 0, cost: Math.max(0, Number(p.cost) || 0) };
+  celebrate(ev);
+}
+
+function streakFor(mid, day) {
+  let n = 0, d = day;
+  for (let i = 0; i < 120; i++, d = addDays(d, -1)) {
+    const list = all('chores').filter(c => c.memberId === mid && choreOn(c, d));
+    if (!list.length) continue;
+    if (list.every(c => isDone(d, c.id))) n++;
+    else if (i === 0) continue; // today still in progress doesn't break the streak
+    else break;
+  }
+  return n;
+}
+function familyAllDone(day) {
+  const groups = members().map(m => m.id).concat(['']).map(id => all('chores').filter(c => (c.memberId || '') === id && choreOn(c, day))).filter(l => l.length);
+  return groups.length > 1 && groups.every(l => l.every(c => isDone(day, c.id)));
+}
+function celebrateChore(c, day, earnedBefore) {
+  const mid = c.memberId || '', stars = Number(c.stars) || 0, evs = [];
+  evs.push({ type: 'chore', personId: mid, choreId: c.id, title: c.title, stars: mid ? stars : 0, newBal: mid ? starBalance(mid).bal : 0 });
+  if (mid) {
+    const s = choreStats(mid, day);
+    if (s.total && s.done === s.total) evs.push({ type: 'allDone', personId: mid, streak: day === today() ? streakFor(mid, day) : 0 });
+    const hit = MILESTONES.filter(t => earnedBefore < t && earnedBefore + stars >= t).pop();
+    if (hit) evs.push({ type: 'milestone', personId: mid, milestone: hit });
+  }
+  if (day === today() && familyAllDone(day)) evs.push({ type: 'familyDone', personId: '' });
+  emitCelebrations(evs);
+}
+function previewCelebration(type) {
+  const m = members()[0];
+  const base = { personId: m ? m.id : '', id: uid(), local: true };
+  const ev = { chore: { type: 'chore', title: 'Make bed', stars: 1, newBal: m ? starBalance(m.id).bal : 1 }, allDone: { type: 'allDone', streak: 3 }, milestone: { type: 'milestone', milestone: 50 }, redeem: { type: 'redeem', title: 'Pick Friday’s movie', cost: 10 } }[type];
+  if (ev) celebrate({ ...base, ...ev });
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', async ev => {
+  if (ev.target === $('#scrim')) return closeSheet();
+  const el = ev.target.closest('[data-act]'); if (!el) return;
+  const a = el.dataset.act, id = el.dataset.id;
+  switch (a) {
+    case 'tab': if (id === 'settings' && ui.tab !== 'settings' && !isParent()) { pinPad('open Family settings', () => { ui.tab = 'settings'; lsSet('kb-tab', 'settings'); render(); }); break; }
+      ui.tab = id; lsSet('kb-tab', id); $('#main').scrollTop = 0; render(); break;
+    case 'close': closeSheet(); break;
+    case 'filter': ui.filter.has(id) ? ui.filter.delete(id) : ui.filter.add(id); render(); break;
+    case 'cal-mode': ui.calMode = id; lsSet('kb-cal', id); render(); break;
+    case 'cal-today': ui.cursor = today(); render(); break;
+    case 'cal-prev': case 'cal-next': {
+      const s = a === 'cal-prev' ? -1 : 1, m = ui.calMode;
+      ui.cursor = m === 'month' ? addMonths(ui.cursor, s) : addDays(ui.cursor, s * (m === 'day' ? 1 : m === 'agenda' ? 7 : isWide() ? 7 : 3)); render(); break; }
+    case 'month-day': ui.cursor = id; ui.calMode = 'day'; render(); break;
+    case 'ev': ev.stopPropagation(); editEvent(id, {}, el.dataset.day || null); break;
+    case 'slot': {
+      if (ev.target.closest('.ev')) break;
+      const r = el.getBoundingClientRect(), hourPx = r.height / (H1 - H0);
+      const m = Math.max(H0 * 60, Math.min((H1 - 1) * 60, H0 * 60 + Math.floor((ev.clientY - r.top) / hourPx * 2) * 30));
+      editEvent(null, { date: id, start: fromMin(m), end: fromMin(m + 60) }); break; }
+    case 'fab': ({ today: () => editEvent(null), calendar: () => editEvent(null), chores: () => withParent('add chores', () => editChore(null)), rewards: () => withParent('add rewards', () => editReward(null)), lists: () => all('lists').length ? $('#itemText')?.focus() : editList(null), meals: () => editMeal(`${today()}_dinner`) })[ui.tab]?.(); break;
+    case 'member-new': withParent('add a person', () => editMember(null)); break;
+    case 'member-edit': withParent('edit people', () => editMember(id)); break;
+    case 'chore-new': withParent('add chores', () => editChore(null)); break;
+    case 'chore-edit': withParent('edit chores', () => editChore(id)); break;
+    case 'adjust': withParent('change stars', () => adjustStars(id)); break;
+    case 'pin-set': setPinSheet(); break;
+    case 'pin-remove': if (el.classList.contains('armed')) { updFamily({ pin: null }); lsSet('kb-parent-device', false); toast('Parent PIN removed'); } else { el.classList.add('armed'); el.textContent = 'Tap again to remove the PIN'; } break;
+    case 'pin-lock': parentUntil = 0; lsSet('kb-parent-device', false); ui.tab = 'today'; render(); toast('Locked'); break;
+    case 'weather': weatherSheet(); break;
+    case 'feed-new': feedSheet(null); break;
+    case 'feed-edit': feedSheet(id); break;
+    case 'feeds-sync': toast('Syncing calendars…'); await syncFeeds(true); toast('Calendars synced'); render(); break;
+    case 'photo-add': $('#photoFile').click(); break;
+    case 'photo-del': if (el.classList.contains('armed')) deletePhoto(id); else { el.classList.add('armed'); el.textContent = 'Tap again'; } break;
+    case 'saver-test': showSaver(); break;
+    case 'saver': hideSaver(); break;
+    case 'chore-toggle': {
+      const day = el.dataset.day || ui.choreDay, c = get('chores', id), k = doneKey(day, id);
+      if (!c) break;
+      if (S.completions.has(k)) { del('completions', k); break; }
+      const earnedBefore = c.memberId ? starBalance(c.memberId).earned : 0;
+      put('completions', k, { choreId: id, date: day, memberId: c.memberId || '', stars: Number(c.stars) || 0, at: Date.now() });
+      celebrateChore(c, day, earnedBefore);
+      if (celLevel() === 'off' && Number(c.stars) && c.memberId) toast(`+${c.stars} ★ for ${(member(c.memberId) || {}).name}`);
+      break; }
+    case 'chore-prev': ui.choreDay = addDays(ui.choreDay, -1); render(); break;
+    case 'chore-next': ui.choreDay = addDays(ui.choreDay, 1); render(); break;
+    case 'chore-today': ui.choreDay = today(); render(); break;
+    case 'reward-new': withParent('add rewards', () => editReward(null)); break;
+    case 'reward-edit': withParent('edit rewards', () => editReward(id)); break;
+    case 'redeem': redeem(id, el.dataset.m); break;
+    case 'list-new': editList(null); break;
+    case 'list-edit': withParent('rename or delete lists', () => editList(id)); break;
+    case 'list-quick': { const nid = uid(); ui.listId = nid; put('lists', nid, { name: id, order: Date.now() }); break; }
+    case 'list-pick': ui.listId = id; lsSet('kb-list', id); render(); break;
+    case 'item-toggle': { const i = get('items', id); const { id: _, ...d } = i; put('items', id, { ...d, done: !i.done }); break; }
+    case 'item-del': del('items', id); break;
+    case 'items-clear': for (const i of all('items').filter(i => i.listId === ui.listId && i.done)) await del('items', i.id); break;
+    case 'meal': canWrite ? editMeal(id) : null; break;
+    case 'meal-prev': ui.mealWeek = addDays(ui.mealWeek, -7); render(); break;
+    case 'meal-next': ui.mealWeek = addDays(ui.mealWeek, 7); render(); break;
+    case 'meal-this': ui.mealWeek = mondayOf(today()); render(); break;
+    case 'ics': importICS(); break;
+    case 'sample-load': loadSample(); break;
+    case 'sample-clear': if (el.classList.contains('armed')) clearSample(); else { el.classList.add('armed'); el.textContent = 'Tap again to remove'; } break;
+    case 'sleep': hideSaver(); renderSleep(); $('#sleep').hidden = false; celStop(); break;
+    case 'wake': $('#sleep').hidden = true; $('#sleep').classList.remove('night'); break;
+    case 'fullscreen': try { await (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()); } catch { toast('Full screen is not available here. On iPad, add Kinboard to the Home Screen instead.'); } break;
+    case 'cel-preview': previewCelebration(id); break;
+    case 'fam-create': createFamily(el); break;
+    case 'fam-local': lsSet('kb-localonly', true); mode = 'local'; loadLocal(); render(); break;
+    case 'fam-joinscreen': mode = 'setup'; render(); break;
+    case 'fam-copy': try { await navigator.clipboard.writeText(fmtCode(famCode)); toast('Code copied'); } catch { const r = document.createRange(); r.selectNodeContents($('#famCodeShow')); getSelection().removeAllRanges(); getSelection().addRange(r); toast('Code selected. Tap Copy.'); } break;
+    case 'fam-share': {
+      const text = `Join our family board on Kinboard. Family code: ${fmtCode(famCode)}\nOr open: ${(CFG.appUrl || location.href.split('#')[0])}#join-${famCode}`;
+      try { if (Native && Native.Plugins.Share) await Native.Plugins.Share.share({ title: 'Kinboard family code', text }); else if (navigator.share) await navigator.share({ title: 'Kinboard family code', text, url: `${(CFG.appUrl || location.href.split('#')[0])}#join-${famCode}` }); else { await navigator.clipboard.writeText(text); toast('Invite copied'); } } catch {}
+      break; }
+    case 'sync-now': await push(); await pull(); toast(syncState === 'offline' ? 'Offline. Changes will upload when you reconnect.' : 'Up to date'); render(); break;
+    case 'fam-leave': if (el.classList.contains('armed')) leaveFamily(); else { el.classList.add('armed', 'danger'); el.textContent = 'Tap again to leave'; } break;
+    case 'fam-delete': if (el.classList.contains('armed')) deleteFamily(); else { el.classList.add('armed'); el.textContent = 'Tap again: deletes everything for everyone'; } break;
+    case 'remind-on': enableReminders(); break;
+    case 'remind-off': lsSet('kb-remind', false); try { const LN = Native.Plugins.LocalNotifications; const p = await LN.getPending(); if (p.notifications.length) await LN.cancel({ notifications: p.notifications.map(n => ({ id: n.id })) }); } catch {} render(); break;
+    case 'theme': { const r = document.documentElement, cur = r.dataset.theme, nx = !cur ? 'light' : cur === 'light' ? 'dark' : ''; if (nx) r.dataset.theme = nx; else delete r.dataset.theme; lsSet('kb-theme', nx); render(); break; }
+  }
+});
+document.addEventListener('submit', ev => {
+  const f = ev.target, kind = f.dataset.form; if (!kind) return;
+  ev.preventDefault();
+  if (kind === 'item') {
+    const inp = $('#itemText'), text = inp.value.trim(); if (!text) return;
+    text.split(/\n|,(?=\s*\S)/).map(s => s.trim()).filter(Boolean).slice(0, 30).forEach((t, i) => put('items', uid() + i, { listId: ui.listId, text: t, done: false, at: Date.now() + i }));
+    inp.value = ''; inp.focus();
+  } else if (kind === 'join') {
+    joinFamily($('#joinCode').value, $('#joinBtn'));
+  } else if (kind === 'family') {
+    const name = $('#famName').value.trim(); if (!name) return;
+    const prev = get('settings', 'family') || {}; const { id: _, ...rest } = prev;
+    put('settings', 'family', { ...rest, name, sample: false }); toast('Family name saved');
+  }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#scrim').hidden) closeSheet(); else $('#sleep').hidden = true; } });
+/* ---------- wall display mode ---------- */
+const wall = { saverMin: lsGet('kb-saver', 0), on: lsGet('kb-wall', false), idleMin: lsGet('kb-idle', 2), nightOn: lsGet('kb-night-on', false), from: lsGet('kb-night-from', '21:30'), to: lsGet('kb-night-to', '06:30') };
+let lastTouch = Date.now(), lastDay = today(), lastMin = -1;
+const loadedAt = Date.now();
+['pointerdown', 'keydown', 'wheel'].forEach(t => addEventListener(t, () => { lastTouch = Date.now(); }, { passive: true, capture: true }));
+async function keepAwake() {
+  if (!wall.on || wakeLock || document.visibilityState !== 'visible') return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } catch {}
+}
+function applyWall() { document.body.classList.toggle('wall', wall.on); if (wall.on) keepAwake(); else if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
+function inNight() { const n = new Date(), m = n.getHours() * 60 + n.getMinutes(), a = toMin(wall.from), b = toMin(wall.to); return a <= b ? m >= a && m < b : m >= a || m < b; }
+function wallTick() {
+  if (mode === 'setup' || mode === 'loading') return;
+  const idle = Date.now() - lastTouch, sl = $('#sleep'), n = new Date();
+  if (lastDay !== today()) { // midnight: move "today" views forward
+    if (ui.cursor === lastDay) ui.cursor = today();
+    if (ui.choreDay === lastDay) ui.choreDay = today();
+    lastDay = today(); render();
+  }
+  if (wall.on && idle > wall.idleMin * 60000 && (ui.tab !== 'today' || ui.filter.size || !$('#scrim').hidden)) {
+    closeSheet(); parentUntil = 0; ui.tab = 'today'; ui.cursor = today(); ui.choreDay = today(); ui.mealWeek = mondayOf(today()); ui.filter.clear(); $('#main').scrollTop = 0; render();
+  } else if (ui.tab === 'today' && $('#scrim').hidden && n.getMinutes() !== lastMin) { lastMin = n.getMinutes(); render(); }
+  if (wall.on && wall.saverMin && idle > wall.saverMin * 60000 && !saverOn() && sl.hidden && !nightActive() && S.photos.size && mode === 'cloud') showSaver();
+  if (wall.on && wall.nightOn) {
+    if (inNight() && idle > 60000 && sl.hidden) { renderSleep(); sl.classList.add('night'); sl.hidden = false; celStop(); hideSaver(); }
+    else if (!inNight() && sl.classList.contains('night') && !sl.hidden) { sl.hidden = true; sl.classList.remove('night'); }
+  }
+  if (wall.on && !Native && n.getHours() === 3 && n.getMinutes() >= 30 && n.getMinutes() < 40 && Date.now() - loadedAt > 3600000 && navigator.onLine) location.reload();
+}
+setInterval(wallTick, 15000);
+document.addEventListener('visibilitychange', keepAwake);
+document.addEventListener('change', e => {
+  if (e.target.id === 'photoFile' && e.target.files.length) { uploadPhotos(e.target.files).then(() => { e.target.value = ''; }); return; }
+  const ck = e.target.dataset && e.target.dataset.cel;
+  if (ck === 'level') { lsSet('kb-cel-level', e.target.value); if (e.target.value === 'off') celStop(); }
+  if (ck === 'sound') { lsSet('kb-cel-sound', e.target.checked); if (e.target.checked) chime('chore'); }
+  const k = e.target.dataset && e.target.dataset.wall; if (!k) return;
+  const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  if (k === 'on') { wall.on = v; lsSet('kb-wall', v); applyWall(); toast(v ? 'Wall display mode on' : 'Wall display mode off'); }
+  if (k === 'idle') { wall.idleMin = Number(v); lsSet('kb-idle', wall.idleMin); }
+  if (k === 'saver') { wall.saverMin = Number(v); lsSet('kb-saver', wall.saverMin); }
+  if (k === 'night') { wall.nightOn = v; lsSet('kb-night-on', v); }
+  if (k === 'from' && v) { wall.from = v; lsSet('kb-night-from', v); }
+  if (k === 'to' && v) { wall.to = v; lsSet('kb-night-to', v); }
+});
+let lastWide = isWide();
+addEventListener('resize', () => { if (isWide() !== lastWide) { lastWide = isWide(); render(); } });
+
+const th = lsGet('kb-theme', ''); if (th) document.documentElement.dataset.theme = th;
+setInterval(tickClock, 20000);
+setTimeout(() => refreshWeather(false), 1500);
+applyWall();
+if (!Native && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+initStore();
+})();
+</script>
+</body>
+</html>

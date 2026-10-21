@@ -1,0 +1,22 @@
+{
+  "name": "kinboard-native",
+  "private": true,
+  "version": "1.0.0",
+  "description": "iOS (and Android) app shell for Kinboard, built with Capacitor.",
+  "scripts": {
+    "web": "rm -rf www && cp -R ../web www && rm -f www/sw.js",
+    "assets": "npx @capacitor/assets generate --ios --iconBackgroundColor '#1E6B5C' --splashBackgroundColor '#EDF1EE' --splashBackgroundColorDark '#0F1614'",
+    "setup:ios": "npm run web && npx cap add ios && npm run assets && npx cap sync ios",
+    "ios": "npm run web && npx cap sync ios && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/share": "^8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.3"
+  }
+}

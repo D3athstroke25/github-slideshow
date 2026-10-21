@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Kinboard Connection Check</title>
+<script src="config.js"></script>
+<style>
+:root{--bg:#EDF1EE;--surface:#fff;--ink:#17251F;--muted:#5B6B65;--line:#D9E1DC;--ok:#1E6B5C;--bad:#C2361F;--wait:#8A6A00}
+@media (prefers-color-scheme:dark){:root{--bg:#0F1614;--surface:#17201D;--ink:#E6EEEA;--muted:#97A8A1;--line:#2A3833;--ok:#5CC2A8;--bad:#FF7A63;--wait:#F2C14E;color-scheme:dark}}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,"Segoe UI",Roboto,sans-serif;padding:calc(24px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 32px max(16px,env(safe-area-inset-left,0px))}
+main{max-width:620px;margin:0 auto;display:grid;gap:14px}
+h1{font-family:Georgia,serif;font-weight:400;margin:0}
+p{margin:0;color:var(--muted)}
+button{font:inherit;font-weight:600;padding:12px 18px;border-radius:12px;border:0;background:var(--ok);color:var(--surface);cursor:pointer}
+button:disabled{opacity:.5}
+ol{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+li{display:grid;grid-template-columns:28px 1fr;gap:8px;padding:12px 14px;border-top:1px solid var(--line)}
+li:first-child{border-top:0}
+li b{display:block}
+li small{color:var(--muted);overflow-wrap:anywhere}
+.s{font-weight:700}
+.pass .s{color:var(--ok)} .fail .s{color:var(--bad)} .run .s{color:var(--wait)}
+#summary{font-weight:700}
+</style>
+</head>
+<body>
+<main>
+  <h1>Kinboard connection check</h1>
+  <p>Tests this device against the real Kinboard server: saving, syncing between two phones, refusing wrong family codes, and live updates. It creates a temporary test family, tests photo storage and the calendar subscription service, and deletes everything at the end. Your own family's data is not touched.</p>
+  <button id="go">Run check</button>
+  <ol id="list"></ol>
+  <p id="summary" role="status"></p>
+  <button id="copy" hidden>Copy results</button>
+</main>
+<script>
+(() => {
+const CFG = window.KB_CONFIG || {};
+const list = document.getElementById('list'), summary = document.getElementById('summary');
+const results = [];
+function row(name) {
+  const li = document.createElement('li'); li.className = 'run';
+  li.innerHTML = '<span class="s">…</span><div><b></b><small>Running</small></div>';
+  li.querySelector('b').textContent = name; list.appendChild(li);
+  return (ok, detail) => {
+    li.className = ok ? 'pass' : 'fail';
+    li.querySelector('.s').textContent = ok ? '✓' : '✗';
+    li.querySelector('small').textContent = detail;
+    results.push(`${ok ? 'PASS' : 'FAIL'}  ${name} — ${detail}`);
+    return ok;
+  };
+}
+async function rpc(name, body) {
+  const t = performance.now();
+  const r = await fetch(`${CFG.url}/rest/v1/rpc/${name}`, { method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const j = await r.json().catch(() => null);
+  const ms = Math.round(performance.now() - t);
+  if (!r.ok) { const e = new Error((j && j.message) || `HTTP ${r.status}`); e.status = r.status; e.ms = ms; throw e; }
+  return { data: j, ms };
+}
+function socket() {
+  return new Promise((res, rej) => {
+    const ws = new WebSocket(CFG.url.replace(/^http/, 'ws') + `/realtime/v1/websocket?apikey=${encodeURIComponent(CFG.key)}&vsn=1.0.0`);
+    const to = setTimeout(() => { try { ws.close(); } catch {} rej(new Error('no connection after 8 s')); }, 8000);
+    ws.onopen = () => { clearTimeout(to); res(ws); };
+    ws.onerror = () => { clearTimeout(to); rej(new Error('connection refused')); };
+  });
+}
+function join(ws, topic) {
+  return new Promise((res, rej) => {
+    const to = setTimeout(() => rej(new Error('join not acknowledged after 6 s')), 6000);
+    const h = ev => { const m = JSON.parse(ev.data); if (m.topic === topic && m.event === 'phx_reply' && m.ref === 'j') { clearTimeout(to); ws.removeEventListener('message', h); m.payload.status === 'ok' ? res() : rej(new Error('join refused: ' + JSON.stringify(m.payload.response))); } };
+    ws.addEventListener('message', h);
+    ws.send(JSON.stringify({ topic, event: 'phx_join', ref: 'j', payload: { config: { broadcast: { self: false, ack: false }, presence: { key: '' }, private: false } } }));
+  });
+}
+
+async function run() {
+  const go = document.getElementById('go'); go.disabled = true; list.innerHTML = ''; results.length = 0; summary.textContent = '';
+  results.push(`Kinboard check ${new Date().toISOString()} · ${navigator.userAgent}`);
+  let code = null, rev1 = 0, fails = 0;
+  const step = async (name, fn) => { const done = row(name); try { const d = await fn(); return done(true, d); } catch (e) { fails++; done(false, e.message || String(e)); return false; } };
+
+  if (!CFG.url || !CFG.key) { row('Server settings')(false, 'config.js is missing'); go.disabled = false; return; }
+  await step('Reach the server', async () => { const r = await rpc('kb_check', { code: 'X' }).catch(e => e); if (r.status === 400 || (r.message || '').includes('family_not_found')) return `answered in ${r.ms} ms`; if (r.data !== undefined) return 'answered'; throw r; });
+  await step('Create a test family', async () => { const r = await rpc('kb_create_family'); code = r.data; return `got a 16-character code in ${r.ms} ms`; });
+  if (!code) { finish(fails + 1); return; }
+  await step('Phone A saves a chore', async () => { const r = await rpc('kb_put_many', { code, rows: [{ col: 'chores', id: 'check-c1', data: { title: 'Test chore', stars: 1 } }] }); rev1 = r.data; return `saved in ${r.ms} ms`; });
+  await step('Phone B (code typed differently) sees it', async () => { const r = await rpc('kb_pull', { code: code.toLowerCase().replace(/-/g, ' '), since: 0 }); if (!r.data.some(d => d.id === 'check-c1')) throw new Error('chore not found'); return `found in ${r.ms} ms`; });
+  await step('Phone B checks it off, phone A gets only the change', async () => {
+    await rpc('kb_put_many', { code, rows: [{ col: 'completions', id: 'check-done', data: { choreId: 'check-c1', stars: 1 } }] });
+    const r = await rpc('kb_pull', { code, since: rev1 });
+    if (r.data.length !== 1 || r.data[0].id !== 'check-done') throw new Error(`expected 1 change, got ${r.data.length}`);
+    return 'exactly 1 change downloaded';
+  });
+  await step('Wrong family code is refused', async () => { const r = await rpc('kb_pull', { code: 'ZZZZ-ZZZZ-ZZZZ-ZZZZ', since: 0 }).catch(e => e); if (r && r.data) throw new Error('wrong code returned data'); return 'refused'; });
+  await step('Tables cannot be read directly', async () => {
+    const r = await fetch(`${CFG.url}/rest/v1/docs?select=*&limit=1`, { headers: { apikey: CFG.key } });
+    const j = await r.json().catch(() => null);
+    if (r.ok && Array.isArray(j) && j.length) throw new Error('rows were returned');
+    return r.ok ? 'returned nothing' : `refused (HTTP ${r.status})`;
+  });
+  await step('Live updates between two devices (Realtime)', async () => {
+    const topic = 'realtime:kb-check-' + Math.random().toString(36).slice(2);
+    const a = await socket(), b = await socket();
+    try {
+      await join(a, topic); await join(b, topic);
+      const t = performance.now();
+      const got = new Promise((res, rej) => { const to = setTimeout(() => rej(new Error('message never arrived (5 s)')), 5000); a.addEventListener('message', ev => { const m = JSON.parse(ev.data); if (m.event === 'broadcast') { clearTimeout(to); res(); } }); });
+      b.send(JSON.stringify({ topic, event: 'broadcast', ref: 'b', payload: { type: 'broadcast', event: 'changed', payload: {} } }));
+      await got;
+      return `delivered in ${Math.round(performance.now() - t)} ms`;
+    } finally { a.close(); b.close(); }
+  });
+  await step('Photo storage', async () => {
+    const b64 = btoa('kinboard-photo-check');
+    await rpc('kb_photo_put', { code, photo_id: 'check-p1', mime: 'image/jpeg', b64 });
+    const r = await rpc('kb_photo_get', { code, photo_id: 'check-p1' });
+    if (!r.data.length || r.data[0].b64.replace(/\s/g, '') !== b64) throw new Error('photo did not round-trip');
+    await rpc('kb_photo_del', { code, photo_id: 'check-p1' });
+    return `stored and read back in ${r.ms} ms`;
+  });
+  await step('Calendar subscription service', async () => {
+    const t = performance.now();
+    const r = await fetch(`${CFG.url}/functions/v1/kb-ics`, { method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ code, url: 'http://not-allowed.example' }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 400 && j.error === 'bad_url') return `answered in ${Math.round(performance.now() - t)} ms, unsafe links refused`;
+    throw new Error(`unexpected answer: HTTP ${r.status} ${j.error || ''}`);
+  });
+  await step('Delete the test family', async () => { await rpc('kb_delete_family', { code }); const r = await rpc('kb_check', { code }).catch(e => e); if (r && r.data) throw new Error('family still exists'); return 'deleted'; });
+  finish(fails);
+}
+function finish(fails) {
+  summary.textContent = fails ? `${fails} check${fails > 1 ? 's' : ''} failed. Tap Copy results and paste them to Claude.` : 'Everything works. Family sync and live updates are ready.';
+  results.push(summary.textContent);
+  document.getElementById('go').disabled = false; document.getElementById('copy').hidden = false;
+}
+document.getElementById('go').onclick = run;
+document.getElementById('copy').onclick = async () => {
+  const text = results.join('\n');
+  try { await navigator.clipboard.writeText(text); summary.textContent += ' Copied.'; }
+  catch { const pre = document.createElement('pre'); pre.textContent = text; pre.style.whiteSpace = 'pre-wrap'; document.querySelector('main').appendChild(pre); }
+};
+})();
+</script>
+</body>
+</html>
