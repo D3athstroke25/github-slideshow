@@ -234,6 +234,58 @@ textarea{height:auto;padding:10px 12px;min-height:70px;resize:vertical}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .check{display:flex;align-items:center;gap:10px;font-weight:600;margin-bottom:12px}
 .check input{width:20px;height:20px;accent-color:var(--accent)}
+/* toggle switch: a real switch, big enough for a child's finger on the wall screen */
+.sws{display:grid;gap:2px;margin:2px 0 4px}
+.swr{display:flex;align-items:flex-start;gap:14px;padding:11px 0;border-bottom:1px solid var(--line)}
+.swr:last-child{border-bottom:0}
+.swr .swtx{flex:1;min-width:0}
+.swr .swtx b{display:block;font-size:15px;font-weight:700;line-height:1.3}
+.swr .swtx span{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+.sw-t{position:relative;flex:0 0 auto;width:52px;height:31px;border-radius:999px;background:var(--line);border:none;padding:0;cursor:pointer;transition:background .18s ease;margin-top:2px}
+.sw-t::after{content:'';position:absolute;top:3px;left:3px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .18s ease}
+.sw-t[aria-checked="true"]{background:var(--accent)}
+.sw-t[aria-checked="true"]::after{transform:translateX(21px)}
+.sw-t:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.sw-t:disabled{opacity:.4;cursor:not-allowed}
+@media (prefers-reduced-motion:reduce){.sw-t,.sw-t::after{transition:none}}
+/* levels */
+.lvl{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-top:3px}
+.lvl .cap{background:var(--mi);color:var(--mb);border-radius:999px;padding:2px 8px;font-size:11px;letter-spacing:.02em}
+.xpbar{height:7px;border-radius:7px;background:var(--surface-2);overflow:hidden;margin:7px 0 2px;border:1px solid var(--line)}
+.xpbar i{display:block;height:100%;background:var(--mi);border-radius:7px;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){.xpbar i{transition:none}}
+.xptx{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:8px}
+/* bonus quest */
+.quest{display:inline-flex;align-items:center;gap:4px;background:var(--star);color:#1A1200;border-radius:999px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:6px;letter-spacing:.02em}
+.chore.quest-on .ct{font-weight:700}
+/* badges */
+.bdg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;margin-top:4px}
+.bdg{text-align:center;padding:12px 7px;border-radius:14px;border:1px solid var(--line);background:var(--surface-2)}
+.bdg.got{background:var(--accent-soft);border-color:var(--accent)}
+.bdg .ic{font-size:27px;line-height:1.1;filter:grayscale(1);opacity:.35}
+.bdg.got .ic{filter:none;opacity:1}
+.bdg b{display:block;font-size:12px;font-weight:700;margin-top:5px;line-height:1.25}
+.bdg span{display:block;font-size:11px;color:var(--muted);margin-top:2px;line-height:1.25}
+/* leaderboard */
+.lb{display:grid;gap:7px;margin-top:4px}
+.lbr{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line)}
+.lbr.top{background:var(--accent-soft);border-color:var(--accent)}
+.lbr .pos{font-size:17px;font-weight:800;width:27px;text-align:center;flex:0 0 auto}
+.lbr .nm{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lbr .sc{font-weight:800;color:var(--star)}
+.bdx{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.bdx summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--muted);list-style:none;display:flex;align-items:center;gap:6px;padding:3px 0}
+.bdx summary::-webkit-details-marker{display:none}
+.bdx summary::before{content:'▸';font-size:11px;transition:transform .15s}
+.bdx[open] summary::before{transform:rotate(90deg)}
+.bdx summary b{color:var(--ink)}
+.bdx .bdg-grid{margin-top:9px}
+@media (prefers-reduced-motion:reduce){.bdx summary::before{transition:none}}
+.av.face{background:var(--mb);font-size:17px}
+.av.face.sm{font-size:13px}
+.pick.faces{display:flex;flex-wrap:wrap;gap:7px}
+.sw.face{width:42px;height:42px;border-radius:12px;font-size:21px;background:var(--surface-2);border:2px solid var(--line);display:grid;place-items:center;padding:0}
+.sw.face[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
 .note{font-size:13px;color:var(--muted)}
 
 /* fab, sheet, toast, sleep */
@@ -637,7 +689,9 @@ function evStyle(e) {
   const stops = ids.slice(0, 3).map(i => `var(--${colorOf(i)}-bg)`);
   return { cls: `m c-${colorOf(ids[0])}`, style: `--evbg:linear-gradient(135deg,${stops.map((s, i) => `${s} ${Math.round(i / stops.length * 100)}% ${Math.round((i + 1) / stops.length * 100)}%`).join(',')});background:var(--evbg)` };
 }
-const avatar = (id, sm) => { const m = member(id); if (!m) return ''; return `<span class="av ${sm ? 'sm' : ''} m c-${m.color}" title="${esc(m.name)}">${esc((m.name || '?').trim()[0] || '?').toUpperCase()}</span>`; };
+const FACES = ['🦊','🐸','🐼','🦁','🐧','🦄','🐙','🐝','🦖','🐬','🦉','🐨','🐯','🦋','🐢','🚀','⚽','🎸','🌸','🍀'];
+const avatar = (id, sm) => { const m = member(id); if (!m) return ''; const f = m.face && gameOn('faces');
+  return `<span class="av ${sm ? 'sm' : ''}${f ? ' face' : ''} m c-${m.color}" title="${esc(m.name)}">${f ? m.face : esc((m.name || '?').trim()[0] || '?').toUpperCase()}</span>`; };
 const avatars = ids => `<span class="avs">${(ids || []).filter(member).slice(0, 4).map(i => avatar(i, true)).join('')}</span>`;
 
 const choreOn = (c, day) => !(c.days && c.days.length) || c.days.includes(pd(day).getDay());
@@ -738,7 +792,8 @@ function vToday() {
     const c = evStyle(e);
     return `<button class="trow ${c.cls} ${st}" style="${c.style}" data-act="ev" data-id="${e.id}" data-day="${d}"><span class="t tn">${e.allDay ? 'All day' : fmtT(e.start)}</span><b>${esc(e.title)}</b>${st === 'now' ? '<span class="nowtag">Now</span>' : ''}</button>`;
   };
-  const choreRow = c => `<button class="chore ${isDone(d, c.id) ? 'done' : ''}" data-act="chore-toggle" data-id="${c.id}" data-day="${d}"><span class="tick">${svg('check', 3)}</span><span class="ct">${esc(c.title)}</span>${Number(c.stars) ? `<span class="stars">★ ${c.stars}</span>` : ''}</button>`;
+  const choreRow = (c, qid) => { const q = qid && c.id === qid && !isDone(d, c.id);
+    return `<button class="chore ${isDone(d, c.id) ? 'done' : ''}${q ? ' quest-on' : ''}" data-act="chore-toggle" data-id="${c.id}" data-day="${d}"><span class="tick">${svg('check', 3)}</span><span class="ct">${esc(c.title)}${q ? '<span class="quest">🎯 2×</span>' : ''}</span>${Number(c.stars) ? `<span class="stars">★ ${q ? c.stars * 2 : c.stars}</span>` : ''}</button>`; };
   const anyone = all('chores').filter(c => !c.memberId && choreOn(c, d));
   return `<div class="todayhead"><h2>${DOWL[n.getDay()]}, ${MON[n.getMonth()]} ${n.getDate()}</h2>
     <div class="strip">${wxToday()}${fam.map(evRow).join('')}${dinner ? `<button class="trow dinner" data-act="tab" data-id="meals"><span class="t">Dinner</span><b>${esc(dinner.text)}</b></button>` : ''}${anyone.length ? `<span class="note">${anyone.filter(c => isDone(d, c.id)).length}/${anyone.length} family chores done</span>` : ''}</div></div>
@@ -747,13 +802,31 @@ function vToday() {
     const ch = all('chores').filter(c => c.memberId === m.id && choreOn(c, d)).sort((a, b) => ['morning', 'afternoon', 'evening', 'any'].indexOf(a.when || 'any') - ['morning', 'afternoon', 'evening', 'any'].indexOf(b.when || 'any'));
     const done = ch.filter(c => isDone(d, c.id)).length;
     const streak = streakFor(m.id, d);
-    return `<section class="card tcol m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1;min-width:0"><h3>${esc(m.name)}</h3><div class="meta tn">${ch.length ? `${done} of ${ch.length} chores` : 'No chores today'} · <span class="stars" data-stars="${m.id}">★ ${starBalance(m.id).bal}</span>${streak >= 2 ? ` · <span class="streak">🔥 ${streak}</span>` : ''}</div></div></div>
+    const lv = gameOn('levels') ? levelFor(xpOf(m.id)) : null;
+    const qid = questFor(m.id, d);
+    return `<section class="card tcol m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1;min-width:0"><h3>${esc(m.name)}</h3><div class="meta tn">${ch.length ? `${done} of ${ch.length} chores` : 'No chores today'} · <span class="stars" data-stars="${m.id}">★ ${starBalance(m.id).bal}</span>${streak >= 2 ? ` · <span class="streak">🔥 ${streak}</span>` : ''}</div>${lv ? `<div class="lvl"><span class="cap">${lv.icon} Lv ${lv.n}</span><span>${esc(lv.name)}</span></div>` : ''}</div></div>
+      ${lv ? `<div class="xpbar" role="img" aria-label="Level ${lv.n}, ${lv.next ? `${lv.toGo} stars to level ${lv.n + 1}` : 'top level'}"><i style="width:${lv.pct}%"></i></div><div class="xptx">${lv.next ? `${lv.toGo} ★ to ${esc(lv.next.name)}` : 'Top level reached'}</div>` : ''}
       ${ch.length ? `<div class="bar"><i style="width:${done / ch.length * 100}%"></i></div>` : ''}
       <h4>Schedule</h4>${mine.length ? mine.map(evRow).join('') : '<p class="note">Nothing scheduled</p>'}
-      ${ch.length ? `<h4>Chores</h4>${ch.map(choreRow).join('')}` : ''}
+      ${ch.length ? `<h4>Chores</h4>${ch.map(c => choreRow(c, qid)).join('')}` : ''}
       ${ch.length && done === ch.length ? `<p class="alldone">All done today!${streak >= 2 ? ` ${streak} day streak 🔥` : ''}</p>` : ''}
     </section>`;
-  }).join('')}${anyone.length ? `<section class="card tcol m c-slate"><div class="mhead"><span class="av">★</span><div><h3>Anyone</h3><div class="meta">Shared chores</div></div></div>${anyone.map(choreRow).join('')}</section>` : ''}</div>`;
+  }).join('')}${anyone.length ? `<section class="card tcol m c-slate"><div class="mhead"><span class="av">★</span><div><h3>Anyone</h3><div class="meta">Shared chores</div></div></div>${anyone.map(c => choreRow(c)).join('')}</section>` : ''}${gameOn('board') && ms.length > 1 ? boardCard(d) : ''}</div>`;
+}
+
+/* The weekly board. Everyone with the same score shares a place, so two kids on 8 stars are
+   both second and neither is told they lost to the other. */
+function boardCard(day) {
+  const rows = weekBoard(day); if (!rows.length) return '';
+  const MED = ['🥇', '🥈', '🥉'];
+  let place = 0, prev = null;
+  const out = rows.map((r, i) => {
+    if (prev === null || r.score !== prev) place = i + 1;
+    prev = r.score;
+    const m = member(r.id) || {};
+    return `<div class="lbr${place === 1 && r.score > 0 ? ' top' : ''}"><span class="pos">${r.score > 0 && place <= 3 ? MED[place - 1] : place}</span>${avatar(r.id, true)}<span class="nm m c-${m.color || 'slate'}">${esc(r.name)}</span><span class="sc">★ ${r.score}</span></div>`;
+  }).join('');
+  return `<section class="card tcol"><div class="mhead"><span class="av">🏆</span><div><h3>This week</h3><div class="meta">Stars earned since Monday</div></div></div><div class="lb">${out}</div></section>`;
 }
 
 /* ---------- calendar ---------- */
@@ -861,9 +934,13 @@ function vRewards() {
   const rw = all('rewards').sort((a, b) => a.cost - b.cost);
   const hist = all('redemptions').sort((a, b) => b.at - a.at).slice(0, 12);
   return `<div class="toolbar"><h2>Stars & rewards</h2>${canWrite ? '<button class="btn" data-act="reward-new">Add reward</button>' : ''}</div>
-  <div class="grid-cards">${members().map(m => { const b = starBalance(m.id); return `<section class="card m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1"><h3>${esc(m.name)}</h3><div class="meta tn">${b.earned} earned · ${b.spent} spent${b.adj ? ` · ${b.adj > 0 ? '+' : ''}${b.adj} adjusted` : ''}</div></div><span class="bal tn" data-stars="${m.id}">★ ${b.bal}</span></div>
-    <button class="btn" data-act="adjust" data-id="${m.id}" style="height:30px;font-size:13px;margin-bottom:6px">Adjust stars</button>
+  <div class="grid-cards">${members().map(m => { const b = starBalance(m.id); const lv = gameOn('levels') ? levelFor(xpOf(m.id)) : null;
+    const bs = gameOn('badges') ? badgesFor(m.id) : null, got = bs ? bs.filter(x => x.got) : null;
+    return `<section class="card m c-${m.color}" data-person="${m.id}"><div class="mhead">${avatar(m.id)}<div style="flex:1"><h3>${esc(m.name)}</h3><div class="meta tn">${b.earned} earned · ${b.spent} spent${b.adj ? ` · ${b.adj > 0 ? '+' : ''}${b.adj} adjusted` : ''}</div>${lv ? `<div class="lvl"><span class="cap">${lv.icon} Lv ${lv.n}</span><span>${esc(lv.name)}</span></div>` : ''}</div><span class="bal tn" data-stars="${m.id}">★ ${b.bal}</span></div>
+    ${lv ? `<div class="xpbar"><i style="width:${lv.pct}%"></i></div><div class="xptx">${lv.next ? `${lv.toGo} ★ to ${esc(lv.next.name)}` : 'Top level reached'}</div>` : ''}
     ${rw.length ? rw.map(r => `<div class="reward"><span class="ct"><b>${esc(r.title)}</b><small class="stars">★ ${r.cost}</small></span><button class="btn ${b.bal >= r.cost ? 'primary' : ''}" data-act="redeem" data-id="${r.id}" data-m="${m.id}" ${b.bal >= r.cost ? '' : 'disabled style="opacity:.5"'}>${b.bal >= r.cost ? 'Redeem' : `${r.cost - b.bal} to go`}</button></div>`).join('') : '<p class="note">Add rewards like “Pick the movie” or “30 min screen time”.</p>'}
+    ${bs ? `<details class="bdx"${got.length ? ' open' : ''}><summary>Badges <b>${got.length} of ${bs.length}</b></summary><div class="bdg-grid">${bs.map(x => `<div class="bdg ${x.got ? 'got' : ''}"><div class="ic">${x.icon}</div><b>${esc(x.name)}</b><span>${esc(x.note)}</span></div>`).join('')}</div></details>` : ''}
+    ${canWrite ? `<button class="btn" data-act="adjust" data-id="${m.id}" style="height:30px;font-size:13px;margin-top:10px">Adjust stars</button>` : ''}
   </section>`; }).join('')}</div>
   ${rw.length && canWrite ? `<h3 class="section-title">Reward list</h3><div class="card">${rw.map(r => `<div class="reward"><span class="ct"><b>${esc(r.title)}</b></span><span class="stars">★ ${r.cost}</span><button class="edit" data-act="reward-edit" data-id="${r.id}" aria-label="Edit">${svg('pen')}</button></div>`).join('')}</div>` : ''}
   ${hist.length ? `<h3 class="section-title">Recent star activity</h3><div class="card">${hist.map(h => `<div class="reward hist">${avatar(h.memberId, true)}<span class="ct">${esc((member(h.memberId) || {}).name || 'Someone')} ${h.adjust ? '' : 'redeemed '}<b style="display:inline">${esc(h.title)}</b></span><span class="tn">${h.adjust ? (h.cost < 0 ? '+' + -h.cost : '−' + h.cost) : '−' + h.cost} ★</span></div>`).join('')}</div>` : ''}`;
@@ -910,11 +987,12 @@ function vSettings() {
     ${mode === 'cloud' ? `<div class="thumbs">${all('photos').sort((a, b) => b.at - a.at).map(ph => `<figure><img data-photo="${ph.id}" alt="Family photo"><button class="edit" data-act="photo-del" data-id="${ph.id}" aria-label="Delete photo">✕</button></figure>`).join('')}</div>
     <input type="file" id="photoFile" accept="image/*" multiple hidden><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn primary" data-act="photo-add">Add photos</button>${all('photos').length ? '<button class="btn" data-act="saver-test">Preview screensaver</button>' : ''}</div>` : '<p class="note">Turn on family sync to add photos.</p>'}</section>
   <section class="card"><h3>Wall display</h3><p class="note">For a touchscreen mounted at home. These settings apply to this screen only.</p>
-    <label class="check"><input type="checkbox" id="wallOn" data-wall="on" ${wall.on ? 'checked' : ''}> Wall display mode</label>
-    <p class="note" style="margin-top:-6px">Larger text and touch targets, keeps the screen on, goes back to Today after
-      <select id="idleMin" data-wall="idle" style="width:auto;height:34px">${[1, 2, 5, 10].map(v => `<option value="${v}" ${wall.idleMin === v ? 'selected' : ''}>${v}</option>`).join('')}</select> min without a touch, and reloads at 3:30 AM to pick up app updates.</p>
+    <div class="sws">${swRow('dev', 'wall-on', 'Wall display mode', 'Larger text and touch targets, keeps the screen on, and reloads at 3:30 AM to pick up app updates.', wall.on)}
+      ${swRow('dev', 'wall-night', 'Night clock', 'A dim clock overnight. Celebrations never play while it is showing.', wall.nightOn)}</div>
+    <p class="note">Go back to Today after
+      <select id="idleMin" data-wall="idle" style="width:auto;height:34px">${[1, 2, 5, 10].map(v => `<option value="${v}" ${wall.idleMin === v ? 'selected' : ''}>${v}</option>`).join('')}</select> min without a touch.</p>
     <label class="check">Photo screensaver after <select id="saverMin" data-wall="saver" style="width:auto;height:34px;margin:0 6px">${[[0, 'never'], [5, '5 min'], [10, '10 min'], [15, '15 min'], [30, '30 min']].map(([v, l]) => `<option value="${v}" ${wall.saverMin === v ? 'selected' : ''}>${l}</option>`).join('')}</select> without a touch</label>
-    <label class="check"><input type="checkbox" id="nightOn" data-wall="night" ${wall.nightOn ? 'checked' : ''}> Night clock from <input type="time" id="nightFrom" data-wall="from" value="${wall.from}" style="width:auto"> to <input type="time" id="nightTo" data-wall="to" value="${wall.to}" style="width:auto"></label>
+    <label class="check">Night clock from <input type="time" id="nightFrom" data-wall="from" value="${wall.from}" style="width:auto"> to <input type="time" id="nightTo" data-wall="to" value="${wall.to}" style="width:auto"></label>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="sleep">Show sleep clock now</button><button class="btn" data-act="fullscreen">Full screen</button><button class="btn" data-act="theme">Theme: ${({ light: 'Light', dark: 'Dark' })[document.documentElement.dataset.theme] || 'System'}</button></div></section>
   <section class="card"><h3>Family sync</h3>
     ${mode === 'cloud' ? `<p class="note">Everyone who enters this code in Kinboard sees and edits the same board. Treat it like a house key: anyone with it can see your family's calendar.</p>
@@ -925,11 +1003,18 @@ function vSettings() {
     : `<p class="note">This board is saved on this device only. Turn on sync to share it with your family; everything here comes along.</p><button class="btn primary" data-act="fam-create">Turn on family sync</button> <button class="btn" data-act="fam-joinscreen">Join an existing family</button>`}
   </section>
   ${Native ? `<section class="card"><h3>Reminders</h3><p class="note">Get a notification 15 minutes before each timed event in the next week.</p>${lsGet('kb-remind', false) ? '<button class="btn" data-act="remind-off">Turn off reminders</button>' : '<button class="btn primary" data-act="remind-on">Turn on reminders</button>'}</section>` : ''}
+  <section class="card"><h3>Game</h3><p class="note">Turn each piece on or off. These apply to the whole family, so every phone and the wall screen match. Nothing is lost by switching one off: progress keeps counting underneath and reappears when you switch it back on.${parentPin() && !isParent() ? ' Ask a parent to change these.' : ''}</p>
+    <div class="sws">
+      ${swRow('game', 'levels', 'Levels and XP', 'Stars earned become XP. Kids level up from Sprout to Cosmic. Spending stars never costs a level.', gameOn('levels'), !isParent())}
+      ${swRow('game', 'badges', 'Badges', 'Twelve achievements to unlock, like a 7-day streak or a first 100 stars.', gameOn('badges'), !isParent())}
+      ${swRow('game', 'quest', 'Daily bonus chore', 'One chore a day per kid is worth double. Picked automatically, the same on every screen.', gameOn('quest'), !isParent())}
+      ${swRow('game', 'board', 'Weekly leaderboard', 'A board of stars earned since Monday. Off by default — it suits some families and not others.', gameOn('board'), !isParent())}
+      ${swRow('game', 'faces', 'Animal faces', 'Each person can pick a face instead of a letter, so young kids find their own column.', gameOn('faces'), !isParent())}
+    </div></section>
   <section class="card"><h3>Celebrations</h3><p class="note">Confetti and cheers when someone finishes a chore or redeems a reward. They also play on every other family screen that's open. These settings apply to this device only.</p>
     <div class="two"><label class="field"><span>Intensity</span><select id="celLevel" data-cel="level">${[['full', 'Full'], ['subtle', 'Subtle'], ['off', 'Off']].map(([v, l]) => `<option value="${v}" ${celLevel() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
-    <label class="check"><input type="checkbox" id="celSound" data-cel="sound" ${lsGet('kb-cel-sound', false) ? 'checked' : ''}> Celebration sounds</label>
-    <p class="note" style="margin-top:-6px">Sounds stay silent during night-clock hours. Celebrations never play while the night clock is showing.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${members().length ? [['chore', 'Chore'], ['allDone', 'All done'], ['milestone', 'Milestone'], ['redeem', 'Reward']].map(([k, l]) => `<button class="btn" data-act="cel-preview" data-id="${k}">Preview: ${l}</button>`).join('') : '<p class="note">Add a person to preview celebrations.</p>'}</div></section>
+    <div class="sws">${swRow('dev', 'cel-sound', 'Celebration sounds', 'Short chimes, played on this device only. Silent during night-clock hours.', lsGet('kb-cel-sound', false))}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${members().length ? [['chore', 'Chore'], ['allDone', 'All done'], ['milestone', 'Milestone'], ['redeem', 'Reward'], ...(gameOn('levels') ? [['levelUp', 'Level up']] : []), ...(gameOn('badges') ? [['badge', 'Badge']] : [])].map(([k, l]) => `<button class="btn" data-act="cel-preview" data-id="${k}">Preview: ${l}</button>`).join('') : '<p class="note">Add a person to preview celebrations.</p>'}</div></section>
   <section class="card"><h3>Sample data</h3><p class="note">Explore the app with a pretend family. Sample items are marked and can be removed in one tap.</p>
     ${COLS.some(c => all(c).some(x => x.sample)) ? '<button class="btn danger" data-act="sample-clear" id="sampleClear">Remove sample data</button>' : '<button class="btn" data-act="sample-load">Load sample data</button>'}</section>
   </div>`;
@@ -954,6 +1039,10 @@ function armDelete(f, fn) {
 }
 const memberPicker = (sel, name = 'mem') => `<div class="pick" data-pick="${name}">${members().map(m => `<button type="button" class="m c-${m.color}" data-v="${m.id}" aria-pressed="${sel.includes(m.id)}">${avatar(m.id, true)}${esc(m.name)}</button>`).join('')}</div>`;
 const picked = (f, name) => [...f.querySelectorAll(`[data-pick="${name}"] [aria-pressed="true"]`)].map(b => b.dataset.v);
+/* One switch row. `k` is routed by the click handler; `scope` says whether it is a family
+   setting (every screen) or a device setting (this screen only). */
+const swRow = (scope, k, label, note, on, dis) => `<div class="swr"><span class="swtx"><b>${label}</b>${note ? `<span>${note}</span>` : ''}</span>
+  <button type="button" class="sw-t" role="switch" aria-checked="${on ? 'true' : 'false'}" aria-label="${label}" data-sw="${scope}" data-k="${k}"${dis ? ' disabled' : ''}></button></div>`;
 function wirePick(f, single) {
   f.querySelectorAll('[data-pick]').forEach(p => p.addEventListener('click', e => {
     const b = e.target.closest('button[data-v]'); if (!b) return;
@@ -1033,13 +1122,14 @@ function editMember(id) {
     <label class="field"><span>Name</span><input type="text" id="mName" name="name" required value="${esc(m.name)}" placeholder="Mom, Liam, Grandma…"></label>
     <label class="field"><span>Role (optional)</span><input type="text" id="mRole" name="role" value="${esc(m.role || '')}" placeholder="Parent, Kid, Babysitter"></label>
     <div class="field"><span>Color</span><div class="pick swatches" data-pick="color">${COLORS.map(c => `<button type="button" class="sw m c-${c}" data-v="${c}" aria-pressed="${m.color === c}" aria-label="${c}"></button>`).join('')}</div></div>
+    <div class="field"><span>Face (optional)</span><div class="pick faces" data-pick="face"><button type="button" class="sw face" data-v="" aria-pressed="${!m.face}" aria-label="Use the first letter">${esc((m.name || '?').trim()[0] || '?').toUpperCase()}</button>${FACES.map(f2 => `<button type="button" class="sw face" data-v="${f2}" aria-pressed="${m.face === f2}" aria-label="${f2}">${f2}</button>`).join('')}</div><p class="note">A face helps a child who can't read yet find their own column.</p></div>
     ${id ? '<p class="note">Deleting a person keeps their events but removes their color tag.</p>' : ''}
     ${actions(!!id)}`, f => {
     const name = f.name.value.trim(); if (!name) return;
-    const out = { name, role: f.role.value.trim(), color: picked(f, 'color')[0] || 'slate', order: m.order ?? Date.now() };
+    const out = { name, role: f.role.value.trim(), color: picked(f, 'color')[0] || 'slate', face: picked(f, 'face')[0] || '', order: m.order ?? Date.now() };
     if (m.sample) out.sample = true;
     put('members', id || uid(), out); closeSheet(); toast(id ? 'Saved' : `${name} added`);
-  }, f => { wirePick(f, ['color']); armDelete(f, () => { del('members', id); ui.filter.delete(id); }); });
+  }, f => { wirePick(f, ['color', 'face']); armDelete(f, () => { del('members', id); ui.filter.delete(id); }); });
 }
 function editChore(id) {
   const c = id ? get('chores', id) : { title: '', memberId: [...ui.filter][0] || (members()[0] || {}).id || '', stars: 1, days: [], when: 'any' };
@@ -1489,10 +1579,101 @@ async function nextSlide() {
 }
 function hideSaver() { const sv = $('#saver'); if (sv.hidden) return; sv.hidden = true; sv.innerHTML = ''; clearInterval(saverT); }
 
+/* ---------- game layer ----------
+   Levels, badges, a daily bonus chore and a weekly leaderboard. Every piece is a family
+   setting so one toggle changes every screen at once, and all of it is derived from the
+   completions already in the data: nothing new is stored, so turning a feature off and on
+   again never loses progress, and an old board gains levels the moment it is switched on. */
+const GAME_DEFAULTS = { levels: true, badges: true, quest: true, board: false, faces: true };
+const game = () => ({ ...GAME_DEFAULTS, ...(famSettings().game || {}) });
+const gameOn = k => !!game()[k];
+
+/* XP is stars EARNED over all time. Spending stars on a reward never costs a level, so a kid
+   is never punished for using what they saved. */
+const LEVELS = [
+  { at: 0, name: 'Sprout', icon: '🌱' }, { at: 10, name: 'Helper', icon: '🧺' },
+  { at: 25, name: 'Star', icon: '⭐' }, { at: 50, name: 'Champion', icon: '🏅' },
+  { at: 90, name: 'Hero', icon: '🦸' }, { at: 140, name: 'Legend', icon: '🏆' },
+  { at: 200, name: 'Master', icon: '👑' }, { at: 300, name: 'Grandmaster', icon: '💎' },
+  { at: 450, name: 'Mythic', icon: '🌟' }, { at: 650, name: 'Cosmic', icon: '🚀' },
+];
+function levelFor(xp) {
+  xp = Math.max(0, Number(xp) || 0);
+  let i = 0; while (i + 1 < LEVELS.length && xp >= LEVELS[i + 1].at) i++;
+  const cur = LEVELS[i], next = LEVELS[i + 1] || null;
+  const span = next ? next.at - cur.at : 0;
+  return { n: i + 1, name: cur.name, icon: cur.icon, at: cur.at, next,
+    into: xp - cur.at, span, pct: next ? Math.min(100, Math.round((xp - cur.at) / span * 100)) : 100,
+    toGo: next ? next.at - xp : 0 };
+}
+const xpOf = mid => starBalance(mid).earned;
+
+/* The daily bonus chore. Picked by hashing the day and the person, so every screen in the
+   house lands on the same chore with nothing to sync. Worth double stars. */
+function hash32(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function questFor(mid, day) {
+  if (!gameOn('quest') || !mid) return null;
+  const list = all('chores').filter(c => c.memberId === mid && choreOn(c, day) && Number(c.stars) > 0)
+    .sort((a, b) => a.id < b.id ? -1 : 1);
+  if (list.length < 2) return null;            // with one chore there is no "bonus one"
+  return list[hash32(`${day}|${mid}`) % list.length].id;
+}
+const questBonus = (c, day) => (gameOn('quest') && c.memberId && questFor(c.memberId, day) === c.id) ? Number(c.stars) || 0 : 0;
+
+/* Badges are computed from the data every time, never stored, so they can never drift out of
+   step with the chores and completions they describe. */
+const BADGES = [
+  { id: 'first', icon: '🌱', name: 'First step', note: 'Finish one chore', has: m => m.total >= 1 },
+  { id: 'ten', icon: '🔟', name: 'Ten done', note: 'Finish 10 chores', has: m => m.total >= 10 },
+  { id: 'fifty', icon: '🧹', name: 'Fifty done', note: 'Finish 50 chores', has: m => m.total >= 50 },
+  { id: 'hundred', icon: '💯', name: 'Century', note: 'Finish 100 chores', note2: 1, has: m => m.total >= 100 },
+  { id: 's3', icon: '🔥', name: 'On a roll', note: '3 days in a row', has: m => m.best >= 3 },
+  { id: 's7', icon: '📅', name: 'Full week', note: '7 days in a row', has: m => m.best >= 7 },
+  { id: 's30', icon: '🗓️', name: 'Full month', note: '30 days in a row', has: m => m.best >= 30 },
+  { id: 'stars25', icon: '⭐', name: '25 stars', note: 'Earn 25 stars', has: m => m.xp >= 25 },
+  { id: 'stars100', icon: '🌟', name: '100 stars', note: 'Earn 100 stars', has: m => m.xp >= 100 },
+  { id: 'early', icon: '🌅', name: 'Early bird', note: 'Finish one before 9am', has: m => m.early },
+  { id: 'quest5', icon: '🎯', name: 'Bonus hunter', note: 'Catch 5 bonus chores', has: m => m.quests >= 5 },
+  { id: 'spender', icon: '🎁', name: 'Treat yourself', note: 'Redeem a reward', has: m => m.redeemed >= 1 },
+];
+function badgeStats(mid) {
+  let total = 0, early = 0, quests = 0;
+  S.completions.forEach(c => {
+    if (c.memberId !== mid) return;
+    total++;
+    if (c.at && new Date(c.at).getHours() < 9) early = 1;
+    if (c.bonus) quests++;
+  });
+  let redeemed = 0; S.redemptions.forEach(r => { if (r.memberId === mid) redeemed++; });
+  return { total, early, quests, redeemed, xp: xpOf(mid), best: bestStreak(mid) };
+}
+function bestStreak(mid) {           // longest run of days where every assigned chore was done
+  const days = new Set(); S.completions.forEach(c => { if (c.memberId === mid && c.date) days.add(c.date); });
+  if (!days.size) return 0;
+  let best = 0, run = 0, d = today();
+  for (let i = 0; i < 400; i++, d = addDays(d, -1)) {
+    const st = choreStats(mid, d);
+    if (!st.total) continue;                       // a day with nothing assigned does not break it
+    if (st.done === st.total) { run++; best = Math.max(best, run); } else run = 0;
+  }
+  return best;
+}
+const badgesFor = mid => { const m = badgeStats(mid); return BADGES.map(b => ({ ...b, got: !!b.has(m) })); };
+
+/* Weekly leaderboard, Monday to Sunday, stars earned this week. */
+function weekBoard(day) {
+  const mon = mondayOf(day || today()), week = new Set();
+  for (let i = 0; i < 7; i++) week.add(addDays(mon, i));
+  const tally = new Map(members().map(m => [m.id, 0]));
+  S.completions.forEach(c => { if (week.has(c.date) && tally.has(c.memberId)) tally.set(c.memberId, tally.get(c.memberId) + (Number(c.stars) || 0)); });
+  return [...tally].map(([id, score]) => ({ id, score, name: (member(id) || {}).name || '' }))
+    .sort((a, b) => b.score - a.score || (a.name < b.name ? -1 : 1));
+}
+
 /* ---------- celebrations ----------
    One entry point, celebrate(ev). Events are queued and played one at a time, and are also
    broadcast to the family's other open screens over the same Realtime channel used for sync. */
-const CEL_TYPES = ['chore', 'allDone', 'milestone', 'redeem', 'familyDone'];
+const CEL_TYPES = ['chore', 'allDone', 'milestone', 'redeem', 'familyDone', 'levelUp', 'badge'];
 const MILESTONES = [10, 25, 50, 100, 250, 500, 1000];
 const DEVICE = uid();
 const Cel = { q: [], busy: false, seen: new Set(), log: [] };
@@ -1580,11 +1761,13 @@ function chime(kind) {
 
 function celText(ev, who) {
   switch (ev.type) {
-    case 'chore': return `${who} finished ${ev.title || 'a chore'}${ev.stars ? `, plus ${ev.stars} star${ev.stars > 1 ? 's' : ''}` : ''}.`;
+    case 'chore': return `${who} finished ${ev.title || 'a chore'}${ev.stars ? `, plus ${ev.stars} star${ev.stars > 1 ? 's' : ''}${ev.bonus ? ' — bonus chore!' : ''}` : ''}.`;
     case 'allDone': return `${who} finished every chore today!${ev.streak >= 2 ? ` ${ev.streak} day streak 🔥` : ''}`;
     case 'milestone': return `${who} hit ${ev.milestone} stars!`;
     case 'redeem': return `${who} redeemed ${ev.title} for ${ev.cost} stars.`;
     case 'familyDone': return 'Everyone finished today’s chores!';
+    case 'levelUp': return `${who} reached level ${ev.level} — ${ev.levelName}!`;
+    case 'badge': return `${who} earned the ${ev.badgeName} badge!`;
   }
   return '';
 }
@@ -1672,6 +1855,25 @@ const PLAY = {
     FX.burst({ x: innerWidth * 0.8, y, n: subtle ? 12 : 36, colors: look.confetti, angle: -3 * Math.PI / 4, spread: Math.PI / 2, speed: [6, 12] });
     await sleepMs(2500);
   },
+  async levelUp(ev, look, subtle) {
+    chime('milestone');
+    const txt = celText(ev, look.name);
+    if (reducedMotion()) { flash(look, txt, 2600); await sleepMs(2600); return; }
+    banner(look, txt, `${ev.levelIcon || '⭐'} Level ${ev.level}`, 2600).classList.add('big');
+    const y = innerHeight * 0.4;
+    FX.burst({ x: innerWidth / 2, y, n: subtle ? 26 : 70, colors: look.confetti, spread: Math.PI * 2, speed: [6, 14] });
+    await sleepMs(900);
+    if (!subtle) FX.burst({ x: innerWidth / 2, y: y - 40, n: 34, colors: look.confetti, spread: Math.PI * 2, speed: [5, 11] });
+    await sleepMs(1800);
+  },
+  async badge(ev, look, subtle) {
+    chime('allDone');
+    const txt = celText(ev, look.name);
+    if (reducedMotion()) { flash(look, txt, 2300); await sleepMs(2300); return; }
+    banner(look, txt, `${ev.badgeIcon || '🏅'} New badge`, 2200).classList.add('big');
+    FX.burst({ x: innerWidth / 2, y: innerHeight * 0.35, n: subtle ? 18 : 44, colors: look.confetti, spread: Math.PI * 1.8, speed: [5, 11] });
+    await sleepMs(2300);
+  },
   async familyDone(ev, look, subtle) {
     const fam = { ...look, name: familyName() };
     chime('familyDone');
@@ -1742,7 +1944,10 @@ function onRemoteCelebrate(p) {
   const ev = { id: String(p.id || '').slice(0, 40), type: String(p.type || ''), personId: String(p.personId || '').slice(0, 200), name: String(p.name || '').slice(0, 40),
     choreId: String(p.choreId || '').slice(0, 200), title: String(p.title || '').slice(0, 120), stars: Math.max(0, Math.min(1000, Number(p.stars) || 0)),
     newBal: Number.isFinite(Number(p.newBal)) ? Number(p.newBal) : undefined, streak: Math.max(0, Math.min(3650, Number(p.streak) || 0)),
-    milestone: Number(p.milestone) || 0, cost: Math.max(0, Number(p.cost) || 0) };
+    milestone: Number(p.milestone) || 0, cost: Math.max(0, Number(p.cost) || 0),
+    level: Math.max(0, Math.min(99, Number(p.level) || 0)), levelName: String(p.levelName || '').slice(0, 40),
+    levelIcon: String(p.levelIcon || '').slice(0, 8), badgeName: String(p.badgeName || '').slice(0, 40),
+    badgeIcon: String(p.badgeIcon || '').slice(0, 8), bonus: p.bonus ? 1 : 0 };
   celebrate(ev);
 }
 
@@ -1761,14 +1966,37 @@ function familyAllDone(day) {
   const groups = members().map(m => m.id).concat(['']).map(id => all('chores').filter(c => (c.memberId || '') === id && choreOn(c, day))).filter(l => l.length);
   return groups.length > 1 && groups.every(l => l.every(c => isDone(day, c.id)));
 }
-function celebrateChore(c, day, earnedBefore) {
-  const mid = c.memberId || '', stars = Number(c.stars) || 0, evs = [];
-  evs.push({ type: 'chore', personId: mid, choreId: c.id, title: c.title, stars: mid ? stars : 0, newBal: mid ? starBalance(mid).bal : 0 });
+/* Switch rows. Family switches need a parent when a PIN is set; device switches never do,
+   since they only change the screen in front of you. */
+function toggleSwitch(btn) {
+  const scope = btn.dataset.sw, k = btn.dataset.k, now = btn.getAttribute('aria-checked') === 'true', next = !now;
+  const apply = () => {
+    if (scope === 'game') { updFamily({ game: { ...game(), [k]: next } }); render(); toast(`${btn.getAttribute('aria-label')}: ${next ? 'on' : 'off'}`); return; }
+    if (k === 'cel-sound') { lsSet('kb-cel-sound', next); btn.setAttribute('aria-checked', String(next)); if (next) chime('chore'); return; }
+    if (k === 'wall-on') { wall.on = next; lsSet('kb-wall', next); applyWall(); render(); toast(next ? 'Wall display mode on' : 'Wall display mode off'); return; }
+    if (k === 'wall-night') { wall.nightOn = next; lsSet('kb-night-on', next); btn.setAttribute('aria-checked', String(next)); return; }
+  };
+  if (scope === 'game' && !isParent()) return pinPad('change game settings', apply);
+  apply();
+}
+
+function celebrateChore(c, day, earnedBefore, extra) {
+  const mid = c.memberId || '', stars = (extra && extra.won) != null ? extra.won : (Number(c.stars) || 0), evs = [];
+  evs.push({ type: 'chore', personId: mid, choreId: c.id, title: c.title, stars: mid ? stars : 0, newBal: mid ? starBalance(mid).bal : 0, bonus: extra && extra.bonus ? 1 : 0 });
   if (mid) {
     const s = choreStats(mid, day);
     if (s.total && s.done === s.total) evs.push({ type: 'allDone', personId: mid, streak: day === today() ? streakFor(mid, day) : 0 });
     const hit = MILESTONES.filter(t => earnedBefore < t && earnedBefore + stars >= t).pop();
     if (hit) evs.push({ type: 'milestone', personId: mid, milestone: hit });
+    if (gameOn('levels')) {
+      const a = levelFor(earnedBefore), b = levelFor(earnedBefore + stars);
+      if (b.n > a.n) evs.push({ type: 'levelUp', personId: mid, level: b.n, levelName: b.name, levelIcon: b.icon });
+    }
+    if (gameOn('badges') && extra && extra.badgesBefore) {
+      const had = new Set(extra.badgesBefore);
+      badgesFor(mid).filter(b => b.got && !had.has(b.id))
+        .forEach(b => evs.push({ type: 'badge', personId: mid, badgeId: b.id, badgeName: b.name, badgeIcon: b.icon }));
+    }
   }
   if (day === today() && familyAllDone(day)) evs.push({ type: 'familyDone', personId: '' });
   emitCelebrations(evs);
@@ -1776,13 +2004,16 @@ function celebrateChore(c, day, earnedBefore) {
 function previewCelebration(type) {
   const m = members()[0];
   const base = { personId: m ? m.id : '', id: uid(), local: true };
-  const ev = { chore: { type: 'chore', title: 'Make bed', stars: 1, newBal: m ? starBalance(m.id).bal : 1 }, allDone: { type: 'allDone', streak: 3 }, milestone: { type: 'milestone', milestone: 50 }, redeem: { type: 'redeem', title: 'Pick Friday’s movie', cost: 10 } }[type];
+  const ev = { chore: { type: 'chore', title: 'Make bed', stars: 1, newBal: m ? starBalance(m.id).bal : 1 }, allDone: { type: 'allDone', streak: 3 }, milestone: { type: 'milestone', milestone: 50 }, redeem: { type: 'redeem', title: 'Pick Friday’s movie', cost: 10 },
+    levelUp: { type: 'levelUp', level: 4, levelName: 'Champion', levelIcon: '🏅' }, badge: { type: 'badge', badgeName: 'Full week', badgeIcon: '📅' } }[type];
   if (ev) celebrate({ ...base, ...ev });
 }
 
 /* ---------- events ---------- */
 document.addEventListener('click', async ev => {
   if (ev.target === $('#scrim')) return closeSheet();
+  const sw = ev.target.closest('[data-sw]');
+  if (sw && !sw.disabled) { toggleSwitch(sw); return; }
   const el = ev.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act, id = el.dataset.id;
   switch (a) {
@@ -1824,9 +2055,11 @@ document.addEventListener('click', async ev => {
       if (!c) break;
       if (S.completions.has(k)) { del('completions', k); break; }
       const earnedBefore = c.memberId ? starBalance(c.memberId).earned : 0;
-      put('completions', k, { choreId: id, date: day, memberId: c.memberId || '', stars: Number(c.stars) || 0, at: Date.now() });
-      celebrateChore(c, day, earnedBefore);
-      if (celLevel() === 'off' && Number(c.stars) && c.memberId) toast(`+${c.stars} ★ for ${(member(c.memberId) || {}).name}`);
+      const badgesBefore = c.memberId ? badgesFor(c.memberId).filter(b => b.got).map(b => b.id) : [];
+      const bonus = questBonus(c, day), won = (Number(c.stars) || 0) + bonus;
+      put('completions', k, { choreId: id, date: day, memberId: c.memberId || '', stars: won, at: Date.now(), ...(bonus ? { bonus: 1 } : {}) });
+      celebrateChore(c, day, earnedBefore, { won, bonus, badgesBefore });
+      if (celLevel() === 'off' && won && c.memberId) toast(`+${won} ★ for ${(member(c.memberId) || {}).name}${bonus ? ' (bonus!)' : ''}`);
       break; }
     case 'chore-prev': ui.choreDay = addDays(ui.choreDay, -1); render(); break;
     case 'chore-next': ui.choreDay = addDays(ui.choreDay, 1); render(); break;
