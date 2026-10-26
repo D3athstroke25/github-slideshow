@@ -1,5 +1,5 @@
 // A small stand-in for PostgREST's /rest/v1/rpc endpoint, so tests can call the real SQL
-// functions the same way the app does: named JSON arguments, run as the `anon` role.
+// functions the same way the app does: named JSON arguments, run as `anon` (or as `service_role`, like the Edge Function).
 import pg from 'pg';
 
 export function makePool(port = Number(process.env.GS_PG_PORT || 54329)) {
@@ -12,13 +12,13 @@ async function signature(client, name) {
   const r = await client.query(
     `select p.proargnames as names, array(select format_type(t, null) from unnest(p.proargtypes) t) as types
        from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = $1`, [name]);
-  const sig = r.rows[0] ? Object.fromEntries(r.rows[0].names.map((n, i) => [n, r.rows[0].types[i]])) : null;
+  const sig = r.rows[0] ? Object.fromEntries((r.rows[0].names || []).map((n, i) => [n, r.rows[0].types[i]])) : null;
   sigCache.set(name, sig);
   return sig;
 }
 
 // Returns { status, body } like PostgREST would.
-export async function rpc(pool, name, args = {}, { ip = null } = {}) {
+export async function rpc(pool, name, args = {}, { ip = null, role = 'anon' } = {}) {
   const client = await pool.connect();
   try {
     const sig = await signature(client, name);
@@ -32,7 +32,7 @@ export async function rpc(pool, name, args = {}, { ip = null } = {}) {
     });
     const sql = `select public.${name}(${keys.map((k, i) => `${k} => $${i + 1}::${sig[k]}`).join(', ')}) as r`;
     await client.query('begin');
-    await client.query('set local role anon');
+    await client.query(`set local role ${role === 'service_role' ? 'service_role' : 'anon'}`);
     await client.query(`select set_config('request.headers', $1, true)`, [JSON.stringify(ip ? { 'x-forwarded-for': ip } : {})]);
     const r = await client.query(sql, vals);
     await client.query('commit');

@@ -6,17 +6,27 @@ import { execFileSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import pg from 'pg';
-import { startServer } from './server.mjs';
+import { startMockStripe } from './mock-stripe.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const SHOTS = process.env.GS_SHOTS || '';
 const PORT = Number(process.env.GS_PG_PORT || 54329);
+Object.assign(process.env, {
+  SUPABASE_URL: 'http://127.0.0.1:8098', SUPABASE_SERVICE_ROLE_KEY: 'service-test-key', GS_SERVICE_KEY: 'service-test-key',
+  STRIPE_SECRET_KEY: 'sk_test_mock', STRIPE_API_BASE: 'http://127.0.0.1:8099', STRIPE_WEBHOOK_SECRET: 'whsec_test',
+  RESEND_API_KEY: 're_test', RESEND_API_BASE: 'http://127.0.0.1:8099', GS_APP_URL: 'http://127.0.0.1:8098/',
+});
 execFileSync(path.join(HERE, 'reset-db.sh'), [String(PORT)], { stdio: 'inherit' });
 const su = new pg.Pool({ host: '127.0.0.1', port: PORT, user: 'postgres', database: 'gs_test', max: 2 });
 const sql = async (q, a = []) => (await su.query(q, a)).rows;
-const srv = await startServer(8098);
+await sql(`insert into vault.decrypted_secrets values ('gs_worker_secret', 'test-worker-secret')`);
+const { startServer } = await import('./server.mjs');
+const { handle } = await import('../supabase/functions/gs/index.ts');
+const stripeMock = await startMockStripe(8099);
+const srv = await startServer(8098, { fn: handle });
+const runWorker = async () => (await fetch(srv.origin + '/functions/v1/gs/worker', { method: 'POST', headers: { 'x-worker-secret': 'test-worker-secret' } })).json();
 const U = srv.origin + '/';
 const browser = await chromium.launch();
 
@@ -360,11 +370,185 @@ await block('all-or-nothing result', async () => {
   await b.context().close();
 });
 
+
+await block('email: add, confirm, reset by email', async () => {
+  const p = await newPage(1280, 800);
+  await login(p, 'maya');
+  await nav(p, '#/settings');
+  await p.waitForSelector('form[data-form=email-set]');
+  await p.fill('form[data-form=email-set] input[name=email]', 'maya@example.com');
+  await p.click('form[data-form=email-set] button[type=submit]');
+  await p.waitForSelector('form[data-form=email-verify]');
+  const code = (await sql(`select data->>'code' c from outbox where to_email = 'maya@example.com' and template = 'verify' order by id desc limit 1`))[0].c;
+  await p.fill('form[data-form=email-verify] input[name=code]', '000000' === code ? '111111' : '000000');
+  await p.click('form[data-form=email-verify] button[type=submit]');
+  await p.waitForSelector('form[data-form=email-verify] .err');
+  ok('a wrong code shows an error', /isn.t right/.test(await text(p, 'form[data-form=email-verify] .err')));
+  await p.fill('form[data-form=email-verify] input[name=code]', code);
+  await p.click('form[data-form=email-verify] button[type=submit]');
+  await p.waitForSelector('[data-setting=email_notify]');
+  ok('email confirmed in settings', /maya@example.com/.test(await text(p, '#email')));
+  await p.uncheck('[data-setting=email_notify]');
+  await p.waitForTimeout(400);
+  ok('email notifications can be switched off', (await sql(`select email_notify from users where username = 'maya'`))[0].email_notify === false);
+  await p.check('[data-setting=email_notify]');
+  await p.waitForTimeout(400);
+  await p.evaluate(() => localStorage.clear());
+  await p.goto(U); await nav(p, '#/forgot');
+  await p.fill('form[data-form=forgot] input[name=username]', 'maya');
+  await p.click('[data-act=reset-email]');
+  await p.waitForSelector('.toast');
+  await runWorker();
+  const mail = stripeMock.state.emails.find(m => m.to[0] === 'maya@example.com' && /Reset/.test(m.subject));
+  const rc = mail && mail.text.match(/\n([A-Z0-9]{8})\n/);
+  ok('reset code arrives by email', !!rc);
+  await p.fill('form[data-form=forgot] input[name=code]', rc[1]);
+  await p.fill('form[data-form=forgot] input[name=password]', 'password123');
+  await p.click('form[data-form=forgot] button[type=submit]');
+  await p.waitForFunction(() => !!(window.__gs && window.__gs.S.token));
+  ok('reset by email logs in without a recovery-code prompt', await p.locator('.modal .code').count() === 0);
+  ok('email flow had no console errors', p.errs.length === 0, p.errs.join(' | '));
+  await p.context().close();
+});
+
+let rslug;
+await block('real payments: switch on, payouts, pledge with a card', async () => {
+  await sql(`update users set is_admin = true where username = 'maya'`);
+  await runWorker();
+  const a = await newPage(1280, 800);
+  await login(a, 'maya');
+  await nav(a, '#/admin');
+  await a.waitForSelector('[data-act=adm-pay][data-mode=stripe]');
+  await a.click('[data-act=adm-pay][data-mode=stripe]');
+  await a.click('.modal [data-yes]');
+  await a.waitForFunction(() => window.__gs.conf().payments === 'stripe');
+  ok('admin switches on real payments', (await a.innerText('#foot')).indexOf('Test mode') === -1);
+  await nav(a, '#/settings');
+  await a.waitForSelector('[data-act=stripe-connect]');
+  await shot(a, 'settings-payouts-desktop');
+  await a.click('[data-act=stripe-connect]');
+  await a.waitForURL(/127\.0\.0\.1:8099\/connect\//);
+  await a.click('#finish');
+  await a.waitForURL(/#\/settings/);
+  await a.waitForSelector('[data-act=stripe-dashboard]');
+  ok('creator connects Stripe and comes back ready', /Stripe is connected/.test(await text(a, '#payouts')));
+  const r = await a.evaluate(async () => {
+    const call = async (n, x) => (await fetch(`/rest/v1/rpc/${n}`, { method: 'POST', headers: { apikey: 'x', 'Content-Type': 'application/json' }, body: JSON.stringify({ p_token: window.__gs.S.token, ...x }) })).json();
+    let e = await call('gs_project_new', { p_title: 'Real money radio', p_category: 'technology', p_currency: 'CAD' });
+    e = await call('gs_project_save', { p_project: e.id, p_patch: { blurb: 'A pocket radio funded for real.', story: 'y'.repeat(200), risks: 'Radio parts can be scarce; we have two suppliers.', goal_cents: 10000 } });
+    e = await call('gs_reward_save', { p_project: e.id, p_reward: { title: 'Radio', amount: 6000, ships: true, shipping: 1000 } });
+    return call('gs_project_launch', { p_project: e.id });
+  });
+  rslug = r.slug;
+  ok('project launches with real payments', r.payments === 'stripe', JSON.stringify(r).slice(0, 200));
+  await a.context().close();
+
+  const b = await newPage(390, 844);
+  await login(b, 'sam');
+  await nav(b, `#/p/${rslug}/pledge?reward=${r.rewards[0].id}`);
+  await b.waitForSelector('[data-act=pl-next]');
+  await b.click('[data-act=pl-next]');
+  await b.waitForSelector('form[data-form=pledge]');
+  ok('review explains Stripe instead of test mode', /Secure payment by Stripe/.test(await b.innerText('main')) && /Continue to payment/.test(await text(b, 'form[data-form=pledge] button[type=submit]')));
+  await shot(b, 'pledge-review-stripe-phone');
+  await b.check('form[data-form=pledge] input[name=ok]');
+  await b.click('form[data-form=pledge] button[type=submit]');
+  await b.waitForURL(/127\.0\.0\.1:8099\/checkout\//);
+  ok('backer is sent to Stripe Checkout', /charged CA\$70 only if Real money radio reaches its goal/.test(await b.innerText('body')));
+  await b.click('#save-card');
+  await b.waitForSelector('.thanks h1 >> text=backer');
+  ok('back in the app as backer #1', /backer #1/.test(await text(b, '.thanks h1')) && /Visa ending in 4242/.test(await b.innerText('.thanks')), await b.innerText('.thanks'));
+  await nav(b, '#/p/' + rslug);
+  await b.waitForSelector('#pstats .mine');
+  ok('project page shows the saved card', /Visa ending in 4242/.test(await text(b, '#pstats .mine')));
+  ok('stripe pledge flow had no console errors', b.errs.length === 0, b.errs.join(' | '));
+  await b.context().close();
+
+  // A second backer whose card will be declined.
+  const c = await newPage(1280, 800);
+  await signup(c, 'tess', 'Tess Decline');
+  await nav(c, `#/p/${rslug}/pledge?reward=none`);
+  await c.waitForSelector('[data-pl]');
+  await c.fill('[data-pl]', '40');
+  await c.click('[data-act=pl-next]');
+  await c.check('form[data-form=pledge] input[name=ok]');
+  await c.click('form[data-form=pledge] button[type=submit]');
+  await c.waitForURL(/checkout/);
+  await c.click('#save-declining');
+  await c.waitForSelector('.thanks h1 >> text=backer');
+  ok('second backer pledged with a card that will fail', /backer #2/.test(await text(c, '.thanks h1')));
+  await c.context().close();
+});
+
+await block('real payments: charging, a declined card, and the fix', async () => {
+  await sql(`update projects set deadline = now() - interval '1 minute' where slug = $1`, [rslug]);
+  const w = await runWorker();
+  ok('worker charges the good card and flags the declined one', w.charges === 1 && w.charge_failures === 1, JSON.stringify(w));
+  const b = await newPage(1280, 800);
+  await login(b, 'sam');
+  await nav(b, '#/p/' + rslug);
+  await b.waitForSelector('#pstats .mine');
+  ok('backer sees the charge', /Charged to your Visa ending in 4242/.test(await b.innerText('#pstats')));
+  await b.context().close();
+  const c = await newPage(390, 844);
+  await login(c, 'tess');
+  await nav(c, '#/p/' + rslug);
+  await c.waitForSelector('[data-act=fix-card]');
+  ok('declined backer is asked to update the card', /payment didn.t go through/.test(await c.innerText('#pstats')));
+  await shot(c, 'payment-failed-phone');
+  await c.click('[data-act=fix-card]');
+  await c.waitForURL(/checkout/);
+  await c.click('#save-card');
+  await c.waitForURL(/#\/p\//);
+  await c.waitForSelector('.toast');
+  ok('new card saved', /Card saved/.test(await c.innerText('.toasts')));
+  const w2 = await runWorker();
+  ok('charge retried and paid', w2.charges === 1, JSON.stringify(w2));
+  await nav(c, '#/activity');
+  await c.waitForSelector('.note');
+  ok('activity shows the failure and the receipt', /didn.t go through/.test(await c.innerText('main')) && /was charged/.test(await c.innerText('main')));
+  ok('fix flow had no console errors', c.errs.length === 0, c.errs.join(' | '));
+  await c.context().close();
+});
+
+await block('shipping survey', async () => {
+  const a = await newPage(1280, 800);
+  await login(a, 'maya');
+  const pid = (await sql(`select id from projects where slug = $1`, [rslug]))[0].id;
+  await nav(a, '#/dash/' + pid);
+  await a.waitForSelector('[data-act=survey-send]');
+  ok('dashboard shows what was collected and the fee', /Paid out to your Stripe account/.test(await a.innerText('main')) && /CA\$110/.test(await a.innerText('main')));
+  await shot(a, 'dashboard-after-success-desktop');
+  await a.click('[data-act=survey-send]');
+  await a.click('.modal [data-yes]');
+  await a.waitForSelector('.toast >> text=Survey sent');
+  ok('survey sent to the one shipping backer', /Survey sent to 1 backer/.test(await a.innerText('.toasts')), await a.innerText('.toasts'));
+  const b = await newPage(390, 844);
+  await login(b, 'sam');
+  await nav(b, '#/p/' + rslug);
+  await b.waitForSelector('[data-act=address]');
+  await b.click('[data-act=address]');
+  await b.fill('form[data-form=address] input[name=name]', 'Sam Lee');
+  await b.fill('form[data-form=address] input[name=line1]', '12 Harbour Rd');
+  await b.fill('form[data-form=address] input[name=city]', 'Halifax');
+  await b.fill('form[data-form=address] input[name=country]', 'Canada');
+  await shot(b, 'address-form-phone');
+  await b.click('form[data-form=address] button[type=submit]');
+  await b.waitForSelector('#pstats .mine >> text=Shipping to');
+  ok('backer sees where it ships', /12 Harbour Rd/.test(await b.innerText('#pstats')));
+  await b.context().close();
+  await nav(a, '#/dash/' + pid + '?tab=backers');
+  await a.waitForSelector('table');
+  ok('creator sees the address in the backer list', /12 Harbour Rd/.test(await a.innerText('table')));
+  ok('creator flow had no console errors', a.errs.length === 0, a.errs.join(' | '));
+  await a.context().close();
+});
+
 await block('layout at phone, tablet and desktop, light and dark', async () => {
   for (const [label, w, h, dark] of [['phone', 390, 844, false], ['tablet', 820, 1180, false], ['desktop', 1440, 900, false], ['phone-dark', 390, 844, true], ['desktop-dark', 1440, 900, true]]) {
     const p = await newPage(w, h, { dark });
     await login(p, 'maya');
-    const pages = ['#/', '#/explore', '#/p/' + slug, `#/p/${slug}/updates`, `#/edit/${projectId}/basics`, `#/edit/${projectId}/story`, `#/dash/${projectId}`, '#/activity', '#/me/created', '#/u/maya', '#/settings', '#/how', '#/start'];
+    const pages = ['#/', '#/explore', '#/p/' + slug, `#/p/${slug}/updates`, `#/edit/${projectId}/basics`, `#/edit/${projectId}/story`, `#/edit/${projectId}/launch`, `#/dash/${projectId}`, '#/activity', '#/me/created', '#/me', '#/u/maya', '#/settings', '#/how', '#/start', '#/admin', '#/p/' + rslug];
     const bad = [];
     for (const hsh of pages) {
       await nav(p, hsh); await p.waitForTimeout(250);
@@ -384,6 +568,6 @@ await block('layout at phone, tablet and desktop, light and dark', async () => {
   await s.context().close();
 });
 
-await browser.close(); await srv.close(); await su.end();
+await browser.close(); await srv.close(); await stripeMock.close(); await su.end();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
