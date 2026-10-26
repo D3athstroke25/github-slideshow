@@ -1,0 +1,14 @@
+{
+  "name": "groundswell-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node api.test.mjs && node e2e.test.mjs",
+    "test:api": "node api.test.mjs",
+    "test:e2e": "node e2e.test.mjs",
+    "serve": "node server.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  }
+}

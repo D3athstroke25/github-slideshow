@@ -1,9 +1,9 @@
-name: Deploy Kinboard to GitHub Pages
+name: Deploy Kinboard and Groundswell to GitHub Pages
 
 on:
   push:
     branches: [main]
-    paths: ['kinboard/web/**', '.github/workflows/kinboard-pages.yml']
+    paths: ['kinboard/web/**', 'groundswell/web/**', '.github/workflows/kinboard-pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -23,11 +23,18 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Stamp service worker version so phones pick up the update
-        run: sed -i "s/const VERSION = 'kinboard-v1'/const VERSION = 'kinboard-${GITHUB_SHA::8}'/" kinboard/web/sw.js
+      - name: Assemble the site (Kinboard at the root, Groundswell under /groundswell/)
+        run: |
+          mkdir -p _site/groundswell
+          cp -R kinboard/web/. _site/
+          cp -R groundswell/web/. _site/groundswell/
+      - name: Stamp service worker versions so phones pick up the update
+        run: |
+          sed -i "s/const VERSION = 'kinboard-v1'/const VERSION = 'kinboard-${GITHUB_SHA::8}'/" _site/sw.js
+          sed -i "s/const VERSION = 'groundswell-v1'/const VERSION = 'groundswell-${GITHUB_SHA::8}'/" _site/groundswell/sw.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: kinboard/web
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4

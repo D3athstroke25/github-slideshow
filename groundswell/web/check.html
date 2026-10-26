@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Groundswell connection check</title>
+<style>
+body{font:16px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif;max-width:640px;margin:0 auto;padding:32px 16px;color:#15181C;background:#FAF8F4}
+button{font:inherit;font-weight:700;padding:12px 22px;border-radius:999px;border:0;background:#C8401C;color:#fff;cursor:pointer}
+button:disabled{opacity:.5}
+ol{padding-left:22px} li{margin:8px 0} .ok{color:#1B7350;font-weight:700} .bad{color:#B42318;font-weight:700} .muted{color:#646C75;font-size:14px}
+@media (prefers-color-scheme:dark){body{color:#EEF0F2;background:#111316}.ok{color:#4CC38A}.bad{color:#FF7B6E}.muted{color:#99A1AA}}
+</style>
+<script src="config.js"></script></head>
+<body>
+<p><a href="./" style="color:inherit">&larr; Groundswell</a></p>
+<h1>Connection check</h1>
+<p>Tests that this device can reach Groundswell: sign-up, sessions, image uploads and project drafts. It uses a temporary account and deletes it when done.</p>
+<button id="run">Run check</button>
+<ol id="out"></ol>
+<p class="muted" id="where"></p>
+<script>
+const C = window.GS_CONFIG;
+document.getElementById('where').textContent = 'Server: ' + C.url;
+const out = document.getElementById('out');
+const H = x => Object.assign({ apikey: C.key }, /^eyJ/.test(C.key) ? { Authorization: 'Bearer ' + C.key } : {}, x || {});
+async function rpc(name, body) {
+  const r = await fetch(`${C.url}/rest/v1/rpc/${name}`, { method: 'POST', headers: H({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw Object.assign(new Error((j && j.message) || r.status), { hint: j && j.hint, status: r.status });
+  return j;
+}
+function line(name) { const li = document.createElement('li'); li.textContent = name + ' …'; out.append(li); return (ok, d) => { li.innerHTML = `<span class="${ok ? 'ok' : 'bad'}">${ok ? 'PASS' : 'FAIL'}</span> ${name}${d ? ' <span class="muted">(' + String(d).replace(/[<&]/g, '') + ')</span>' : ''}`; return ok; }; }
+async function step(name, fn) { const done = line(name); try { const d = await fn(); return done(true, d); } catch (e) { return done(false, e.message); } }
+document.getElementById('run').onclick = async function () {
+  this.disabled = true; out.innerHTML = '';
+  const user = 'check_' + Math.random().toString(36).slice(2, 8), pass = crypto.getRandomValues(new Uint32Array(4)).join('-');
+  let token = null;
+  await step('Reach the Groundswell API', async () => { const h = await rpc('gs_home', { p_token: null }); return `${h.stats.live} live projects`; });
+  await step('Create a temporary account', async () => { const r = await rpc('gs_signup', { p_username: user, p_password: pass, p_name: 'Connection check' }); token = r.token; return '@' + user; });
+  if (token) {
+    await step('Session works', async () => { const r = await rpc('gs_me', { p_token: token }); if (r.me.username !== user) throw new Error('wrong user'); });
+    await step('Wrong session is refused', async () => { try { await rpc('gs_me', { p_token: 'not-a-session' }); } catch (e) { if (e.hint === 'auth') return; throw e; } throw new Error('was accepted'); });
+    await step('Upload an image', async () => {
+      const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); g.fillStyle = '#C8401C'; g.fillRect(0, 0, 64, 64);
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.8));
+      const { path } = await rpc('gs_upload_ticket', { p_token: token, p_kind: 'avatar' });
+      const up = await fetch(`${C.url}/storage/v1/object/media/${path}`, { method: 'POST', headers: H({ 'Content-Type': 'image/jpeg', 'x-upsert': 'false' }), body: blob });
+      if (!up.ok) throw new Error('upload ' + up.status + ' ' + (await up.text()).slice(0, 120));
+      const get = await fetch(`${C.url}/storage/v1/object/public/media/${path}`);
+      if (!get.ok) throw new Error('read back ' + get.status);
+      const bad = await fetch(`${C.url}/storage/v1/object/media/u/${path.split('/')[1]}/avatar-unticketed.jpg`, { method: 'POST', headers: H({ 'Content-Type': 'image/jpeg' }), body: blob });
+      if (bad.ok) throw new Error('an unticketed upload was accepted');
+      return `${blob.size} bytes, unticketed upload refused`;
+    });
+    await step('Create and delete a draft project', async () => {
+      const p = await rpc('gs_project_new', { p_token: token, p_title: 'Connection check', p_category: 'design', p_currency: 'USD' });
+      await rpc('gs_project_delete', { p_token: token, p_project: p.id });
+    });
+    await step('Delete the temporary account', () => rpc('gs_account_delete', { p_token: token, p_password: pass }));
+  }
+  this.disabled = false;
+};
+</script>
+</body></html>
