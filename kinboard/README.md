@@ -19,7 +19,7 @@ Family sync uses the Supabase project **kinboard** (`bmmjtouptvkfxxlfqenm`). The
 One-time setup in GitHub:
 1. Merge this branch into `main`.
 2. Go to repo **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
-3. The **Deploy Kinboard to GitHub Pages** workflow publishes `web/` to
+3. The **Deploy Kinboard and Groundswell to GitHub Pages** workflow publishes `web/` to
    **https://d3athstroke25.github.io/github-slideshow/**
 
 On each iPhone:
