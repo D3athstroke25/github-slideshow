@@ -54,7 +54,7 @@ document.getElementById('run').onclick = async function () {
       const p = await rpc('gs_project_new', { p_token: token, p_title: 'Connection check', p_category: 'design', p_currency: 'USD' });
       await rpc('gs_project_delete', { p_token: token, p_project: p.id });
     });
-    await step('Delete the temporary account', () => rpc('gs_account_delete', { p_token: token, p_password: pass }));
+    await step('Delete the temporary account', async () => { await rpc('gs_account_delete', { p_token: token, p_password: pass }); });
   }
   this.disabled = false;
 };
