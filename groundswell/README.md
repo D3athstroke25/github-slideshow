@@ -93,6 +93,25 @@ Update the Terms and Privacy policy with your business details, fees and refund 
 
 The repository must stay **public** for GitHub Pages on a free GitHub account.
 
+## Custom domain (optional)
+
+A custom domain applies to the whole Pages site, so with `fund.example.com` Kinboard is at `https://fund.example.com/` and Groundswell at `https://fund.example.com/groundswell/`.
+
+1. Buy a domain from any registrar.
+2. Add DNS records at the registrar:
+   - **Subdomain** (like `fund.example.com`): a `CNAME` record pointing to `d3athstroke25.github.io`.
+   - **Root domain** (`example.com`): four `A` records pointing to `185.199.108.153`, `185.199.109.153`, `185.199.110.153` and `185.199.111.153`.
+3. On GitHub:
+   - Open your profile **Settings → Pages → Add a domain** and verify it. This stops anyone else claiming it.
+   - In the repository, open **Settings → Pages → Custom domain**, enter the domain and save. When the DNS check passes, tick **Enforce HTTPS**. The workflow deploys with GitHub Actions, so no `CNAME` file is needed.
+4. Point Groundswell at the new address:
+   - `web/config.js`: `appUrl`
+   - `web/index.html`: `og:url` and `og:image`
+   - The Supabase Edge Function secret `GS_APP_URL`: the new address, ending in `/groundswell/`. It's used for email links and the pages Stripe returns to. To keep Stripe returns to the old address working during the switch, also set `GS_EXTRA_RETURN_BASES` to the old address (separate several with commas).
+5. Merge into `main`, then run `…/groundswell/check.html` at the new address.
+
+Logins and Home Screen installs belong to an address, so people sign in again at the new one. For the iPhone app, run `npm run ios` again so it uses the new address. To send email from your domain, verify it in Resend and set `GS_EMAIL_FROM`, for example `Groundswell <hello@example.com>`.
+
 ## iPhone app (on your Mac mini)
 
 Install Xcode and Node.js 22 first, as described in Kinboard's README. Then:
