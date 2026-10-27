@@ -1,0 +1,9 @@
+{
+  "appId": "com.d3athstroke25.groundswell",
+  "appName": "Groundswell",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#FAF8F4"
+  }
+}

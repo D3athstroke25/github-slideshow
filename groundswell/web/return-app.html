@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Back to Groundswell</title>
+<style>body{font:17px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif;max-width:520px;margin:0 auto;padding:56px 20px;color:#15181C;background:#FAF8F4;text-align:center}
+.btn{display:inline-block;margin-top:18px;background:#C8401C;color:#fff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:999px}
+@media (prefers-color-scheme:dark){body{color:#EEF0F2;background:#111316}}</style></head>
+<body>
+<h1 style="font-size:24px">All set</h1>
+<p>Head back to the Groundswell app to finish.</p>
+<a class="btn" id="open" href="groundswell://return">Return to Groundswell</a>
+<script>
+// Opened in the iPhone app's in-app browser after Stripe. The groundswell:// link hands control
+// back to the app, which closes this browser and confirms the card.
+(function () {
+  var q = new URLSearchParams(location.search), to = q.get('to') || '/', s = q.get('session');
+  if (to.charAt(0) !== '/' || to.charAt(1) === '/') to = '/';
+  var link = 'groundswell://return?to=' + encodeURIComponent(to) + (s && /^cs_[A-Za-z0-9_]+$/.test(s) ? '&session=' + s : '');
+  document.getElementById('open').href = link;
+  setTimeout(function () { location.href = link; }, 300);
+})();
+</script>
+</body></html>

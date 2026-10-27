@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node api.test.mjs && node e2e.test.mjs",
+    "test": "node api.test.mjs && node functions.test.mjs && node e2e.test.mjs",
     "test:api": "node api.test.mjs",
+    "test:functions": "node functions.test.mjs",
     "test:e2e": "node e2e.test.mjs",
     "serve": "node server.mjs"
   },

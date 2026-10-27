@@ -3,7 +3,12 @@
 'use strict';
 (() => {
 const CFG = window.GS_CONFIG || {};
-const TEST_MODE = CFG.payments !== 'live';
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const PLUG = (window.Capacitor && window.Capacitor.Plugins) || {};
+// Server settings (gs_config): the payment mode for new launches, and which services are on.
+let CONF = { payments: 'test', email: false, stripe: false, fee_bps: 800 };
+const testSite = () => CONF.payments !== 'stripe';
+const isTest = p => (p && p.payments ? p.payments : CONF.payments) !== 'stripe';
 const MEDIA = `${CFG.url}/storage/v1/object/public/media/`;
 const CATS = [['art', 'Art'], ['comics', 'Comics'], ['crafts', 'Crafts'], ['dance', 'Dance'], ['design', 'Design'],
   ['fashion', 'Fashion'], ['film', 'Film & Video'], ['food', 'Food'], ['games', 'Games'], ['journalism', 'Journalism'],
@@ -318,6 +323,7 @@ async function copyText(t, msg = 'Link copied') {
   catch { modal(`<h2>Copy this</h2><input class="input" readonly value="${esc(t)}" onfocus="this.select()"><div class="acts"><button class="btn primary" data-close>Done</button></div>`); }
 }
 async function share(title, url) {
+  if (NATIVE && PLUG.Share) { try { await PLUG.Share.share({ title, url }); } catch { /* dismissed */ } return; }
   if (navigator.share) { try { await navigator.share({ title, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
   copyText(url);
 }
@@ -360,7 +366,28 @@ function errorPage(e, retry = true) {
   return `<div class="wrap page"><div class="empty"><h3>${nf ? 'Not found' : 'Something went wrong'}</h3><p>${esc(e && e.message || 'Please try again.')}</p>
     <div class="row" style="justify-content:center">${retry && !nf ? '<button class="btn primary" data-act="retry">Try again</button>' : ''}<a class="btn ghost" href="#/">Go home</a></div></div></div>`;
 }
-const testNotice = () => TEST_MODE ? `<div class="notice warn">${icon('info')}<div><b>Test mode.</b> Pledges are recorded and count toward the goal, but no card is taken and no money moves.</div></div>` : '';
+const testNotice = p => isTest(p) ? `<div class="notice warn">${icon('info')}<div><b>Test mode.</b> Pledges are recorded and count toward the goal, but no card is taken and no money moves.</div></div>`
+  : `<div class="notice">${icon('lock')}<div><b>Secure payment by Stripe.</b> You save a card on Stripe\u2019s page. It\u2019s charged only if this project reaches its goal.</div></div>`;
+const cap = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
+const cardText = c => c ? `${cap(c.brand || 'card')} ending in ${c.last4 || '\u2022\u2022\u2022\u2022'}` : '';
+// The gs Edge Function (payments). Adds the session token and where Stripe should send people back.
+async function gsFn(route, body) {
+  let r;
+  try {
+    r = await fetch(`${CFG.url}/functions/v1/gs/${route}`, { method: 'POST', headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ token: S.token, return_base: CFG.appUrl, app: NATIVE, ...body }) });
+  } catch { throw new Error('Can\u2019t reach Groundswell. Check your connection and try again.'); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.message || `Something went wrong (${r.status}). Please try again.`);
+  return data;
+}
+// Stripe pages open in the in-app browser on iPhone, and in this tab on the web.
+async function openOut(url) { if (NATIVE && PLUG.Browser) await PLUG.Browser.open({ url }); else location.href = url; }
+async function startCheckout(args, slug) {
+  const r = await gsFn('pay', { action: 'checkout', ...args });
+  store.set('gs.paying', { ...args, slug, at: Date.now() });
+  await openOut(r.url);
+}
 
 // ------------------------------------------------------------ chrome: header, tab bar, footer
 function renderChrome() {
@@ -383,7 +410,7 @@ function renderChrome() {
     <a href="#/start" class="start" ${cur('start', 'edit')}>${icon('plus')}Start</a>
     <a href="#/activity" ${cur('activity')}>${icon('bell')}Activity${S.unread ? `<span class="dot-badge">${S.unread > 9 ? '9+' : S.unread}</span>` : ''}</a>
     <a href="#/me" ${cur('me', 'settings', 'u', 'login', 'signup')}>${u ? avatar(u, 22) : icon('user')}${u ? 'You' : 'Log in'}</a>`);
-  set('#foot', `<div class="wrap"><div class="row"><span class="logo" style="font-size:17px">${LOGO}groundswell</span>${TEST_MODE ? `<span class="testmode">${icon('info', 'sm')} Test mode: no real money moves</span>` : ''}</div>
+  set('#foot', `<div class="wrap"><div class="row"><span class="logo" style="font-size:17px">${LOGO}groundswell</span>${testSite() ? `<span class="testmode">${icon('info', 'sm')} Test mode: no real money moves</span>` : ''}</div>
     <nav aria-label="Footer"><a href="#/how">How it works</a><a href="#/explore">Discover</a><a href="#/start">Start a project</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav></div>`);
 }
 function openMenu(btn) {
@@ -509,18 +536,34 @@ async function getProject(slug, preview, fresh = false) {
   PCACHE.set(slug, { d, at: Date.now() });
   return d;
 }
+// What became of my pledge, in words.
+function pledgeOutcome(pl, p) {
+  if (pl.status === 'dropped') return 'Your pledge was not collected.';
+  if (pl.status !== 'collected') return '';
+  if (p.payments !== 'stripe') return 'Pledge collected (test mode, no money moved).';
+  return { paid: `Charged to your ${cardText(pl.card)}.`, due: 'Your card will be charged shortly.', processing: 'Your card is being charged.',
+    failed: 'Your card was declined.', abandoned: 'The payment failed, so the pledge was dropped.' }[pl.charge_status] || 'Your pledge was collected.';
+}
+function payAlerts(d) {
+  const p = d.project, pl = d.me.pledge, a = d.me.address;
+  let out = '';
+  if (pl && pl.charge_status === 'failed') out += `<div class="notice warn" style="margin-bottom:12px">${icon('alert')}<div><b>Your payment didn’t go through.</b> ${esc(pl.charge_error || '')} Update your card by ${fmtDate(pl.fix_by)} to keep your pledge.<div style="margin-top:10px"><button class="btn primary sm" data-act="fix-card" data-pledge="${pl.id}" data-slug="${p.slug}">Update card</button></div></div></div>`;
+  if (d.me.needs_address) out += `<div class="notice accent" style="margin-bottom:12px">${icon('truck')}<div><b>Where should your reward go?</b> The creator is getting ready to ship.<div style="margin-top:10px"><button class="btn primary sm" data-act="address" data-id="${p.id}" data-slug="${p.slug}">Enter shipping address</button></div></div></div>`;
+  else if (a) out += `<div class="mine"><span class="muted small">Shipping to</span><b>${esc(a.name)}</b><span class="small muted">${esc([a.line1, a.city, a.region, a.country].filter(Boolean).join(', '))} · <button class="linkbtn small" data-act="address" data-id="${p.id}" data-slug="${p.slug}">Edit</button></span></div>`;
+  return out;
+}
 function statsPanel(d) {
   const p = d.project, me = d.me, live = p.status === 'live';
   const t = live ? timeLeft(p.deadline) : null;
+  const shareRow = `<div class="actions">${saveBtnWide(p)}<button class="btn ghost" data-act="share" data-slug="${p.slug}" data-title="${esc(p.title)}">${icon('share')}Share</button></div>`;
   let action = '';
   if (me.creator) {
     action = `<div class="actions"><a class="btn dark" href="#/edit/${p.id}/basics">${icon('edit')}Edit project</a>${p.status !== 'draft' ? `<a class="btn ghost" href="#/dash/${p.id}">${icon('chart')}Dashboard</a>` : ''}</div>`;
   } else if (live) {
     const pl = me.pledge && me.pledge.status === 'active' ? me.pledge : null;
-    action = (pl ? `<div class="mine"><span class="muted small">You're backer #${pl.backer_no}</span><b>${money(pl.amount, p.currency)} pledged${pl.reward ? ` · ${esc(pl.reward)}` : ''}</b></div>
+    action = (pl ? `<div class="mine"><span class="muted small">You're backer #${pl.backer_no}</span><b>${money(pl.amount, p.currency)} pledged${pl.reward ? ` · ${esc(pl.reward)}` : ''}</b>${pl.card ? `<span class="small muted">${icon('lock', 'sm')} ${esc(cardText(pl.card))} · <button class="linkbtn small" data-act="fix-card" data-pledge="${pl.id}" data-slug="${p.slug}">Change card</button></span>` : ''}</div>
         <a class="btn ghost block lg" href="#/p/${p.slug}/pledge">Manage your pledge</a>`
-      : `<a class="btn primary block lg" href="#/p/${p.slug}/pledge" data-act="back">Back this project</a>`)
-      + `<div class="actions">${saveBtnWide(p)}<button class="btn ghost" data-act="share" data-slug="${p.slug}" data-title="${esc(p.title)}">${icon('share')}Share</button></div>`;
+      : `<a class="btn primary block lg" href="#/p/${p.slug}/pledge" data-act="back">Back this project</a>`) + shareRow;
   } else if (p.status === 'draft') {
     action = '<div class="result bad"><b>Not launched yet</b>This is a draft preview.</div>';
   }
@@ -530,16 +573,16 @@ function statsPanel(d) {
       ? `<div class="result good"><b>${icon('check')} Funded</b>This project was successfully funded on ${fmtDate(p.ended_at)}.</div>`
       : p.status === 'canceled' ? `<div class="result bad"><b>Canceled</b>The creator canceled this campaign on ${fmtDate(p.ended_at)}. No one was charged.</div>`
         : `<div class="result bad"><b>Funding unsuccessful</b>This project didn’t reach its goal by ${fmtDate(p.ended_at)}. No one was charged.</div>`;
-    const mine = pl && pl.status !== 'canceled' ? `<div class="mine"><span class="muted small">You were backer #${pl.backer_no}</span><b>${money(pl.amount, p.currency)}${pl.reward ? ` · ${esc(pl.reward)}` : ''}</b><span class="small muted">${pl.status === 'collected' ? (TEST_MODE ? 'Pledge collected (test mode, no money moved).' : 'Your pledge was collected.') : 'Your pledge was not collected.'}</span></div>` : '';
-    action = res + mine + (me.creator ? action : `<div class="actions">${saveBtnWide(p)}<button class="btn ghost" data-act="share" data-slug="${p.slug}" data-title="${esc(p.title)}">${icon('share')}Share</button></div>`);
+    const mine = pl && pl.status !== 'canceled' ? `<div class="mine"><span class="muted small">You were backer #${pl.backer_no}</span><b>${money(pl.amount, p.currency)}${pl.reward ? ` · ${esc(pl.reward)}` : ''}</b><span class="small muted">${esc(pledgeOutcome(pl, p))}</span></div>` : '';
+    action = res + mine + (me.creator ? action : shareRow);
   }
   return `${bar(p)}
     <div class="big">${money(p.pledged, p.currency)}</div>
     <div class="of">pledged of ${money(p.goal, p.currency)} goal</div>
     <div class="kv"><div><b>${p.backers.toLocaleString()}</b><span>${p.backers === 1 ? 'backer' : 'backers'}</span></div>
       ${live ? `<div><b>${t.n}</b><span>${t.unit} to go</span></div>` : `<div><b>${pctOf(p)}%</b><span>funded</span></div>`}</div>
-    ${action}
-    ${live ? `<p class="aon"><b>All or nothing.</b> This project will only be funded if it reaches its goal by ${fmtDateTime(p.deadline)}.</p>` : ''}`;
+    ${payAlerts(d)}${action}
+    ${live ? `<p class="aon"><b>All or nothing.</b> This project will only be funded if it reaches its goal by ${fmtDateTime(p.deadline)}.${p.payments === 'stripe' ? ' Cards are charged only then.' : ''}</p>` : ''}`;
 }
 const saveBtnWide = p => `<button class="btn ghost" data-act="save" data-id="${p.id}" aria-pressed="${!!p.saved}">${icon('bookmark')}${p.saved ? 'Saved' : 'Remind me'}</button>`;
 function rewardCard(r, p, { link = true } = {}) {
@@ -563,6 +606,7 @@ async function pageProject(ctx) {
   const [, slug, tab = 'campaign', sub] = ctx.parts;
   if (tab === 'pledge') return pagePledge(ctx, slug);
   if (tab === 'thanks') return pageThanks(ctx, slug);
+  if (tab === 'paid') return pagePaid(ctx, slug);
   const cached = PCACHE.get(slug);
   if (!cached) setMain(`<div class="wrap page"><div class="skel" style="height:48px;max-width:560px;margin:20px auto"></div><div class="p-top"><div class="skel" style="aspect-ratio:16/9"></div><div class="skel" style="height:280px"></div></div></div>`);
   const d = await getProject(slug, ctx.q.preview);
@@ -714,12 +758,12 @@ function renderPledge() {
           <div class="total"><span>Total pledge</span><span>${money(total, cur)}</span></div>
         </div></div>
       <div style="display:grid;gap:12px;margin-top:16px">
-        ${testNotice()}
+        ${testNotice(p)}
         <div class="notice">${icon('info')}<div>You’ll only be charged if this project reaches its goal by <b>${fmtDateTime(p.deadline)}</b>. You can change or cancel your pledge until then.</div></div>
       </div>
       <form data-form="pledge" style="margin-top:20px">
         <label class="check"><input type="checkbox" name="ok" required><span>I understand that Groundswell doesn’t guarantee projects or rewards. The creator is responsible for delivering what they promised.</span></label>
-        <div class="row" style="margin-top:20px"><button type="button" class="btn ghost" data-act="pl-back">${icon('chevL')}Back</button><button type="submit" class="btn primary lg" style="flex:1">${mine ? 'Update pledge' : 'Pledge'} ${money(total, cur)}</button></div>
+        <div class="row" style="margin-top:20px"><button type="button" class="btn ghost" data-act="pl-back">${icon('chevL')}Back</button><button type="submit" class="btn primary lg" style="flex:1">${p.payments === 'stripe' && !(mine && mine.card) ? `Continue to payment \u00b7 ${money(total, cur)}` : `${mine ? 'Update pledge' : 'Pledge'} ${money(total, cur)}`}</button></div>
       </form></div>`);
     return;
   }
@@ -750,6 +794,20 @@ function renderPledge() {
   const sel0 = $('.reward.sel'); if (sel0 && sel0.scrollIntoView && PL._scroll) sel0.scrollIntoView({ block: 'center' });
   PL._scroll = false;
 }
+// Back from Stripe Checkout: confirm the saved card, then show the thank-you page.
+async function pagePaid(ctx, slug) {
+  if (!S.token) return needLogin(currentPath());
+  setMain(`<div class="wrap page"><div class="thanks narrow"><div class="seal">${icon('lock')}</div><h1>Confirming your card\u2026</h1><p class="muted" style="margin-top:10px">This takes a moment.</p></div></div>`);
+  let r;
+  try { r = await gsFn('pay', { action: 'confirm', session: ctx.q.session || null, intent: ctx.q.intent || null }); }
+  catch (e) { if (!ctx.stale()) setMain(errorPage(e)); return; }
+  if (ctx.stale()) return;
+  store.del('gs.paying'); PCACHE.delete(slug);
+  if (r.done && r.kind === 'intent' && r.pledge) { THANKS = { slug, project: r.project, pledge: r.pledge }; return go(`/p/${slug}/thanks`); }
+  if (r.done && r.kind === 'fix') { toast('Card saved. If a payment was due, we\u2019ll charge it in a minute or two.'); return go(`/p/${slug}`); }
+  if (r.done) return go(`/p/${slug}`);
+  setMain(`<div class="wrap page"><div class="empty"><h3>Your card wasn\u2019t saved</h3><p>Your pledge isn\u2019t complete yet. You can try again from the project page.</p><a class="btn primary" href="#/p/${slug}/pledge">Back to your pledge</a></div></div>`);
+}
 async function pageThanks(ctx, slug) {
   let t = THANKS && THANKS.slug === slug ? THANKS : null;
   if (!t) { const d = await getProject(slug, null, true); if (ctx.stale()) return; if (!d.me.pledge) return go('/p/' + slug); t = { slug, project: d.project, pledge: d.me.pledge }; }
@@ -758,7 +816,7 @@ async function pageThanks(ctx, slug) {
     <div class="seal">${icon('check')}</div>
     <h1>You’re backer #${t.pledge.backer_no}!</h1>
     <p class="lede" style="margin:12px auto 0">Thanks for backing <b>${esc(p.title)}</b>. Your pledge of ${money(t.pledge.amount, p.currency)} is in. We’ll let you know in Activity when the creator posts updates, and when the campaign ends on ${fmtDate(p.deadline)}.</p>
-    ${TEST_MODE ? `<div style="max-width:560px;margin:20px auto 0;text-align:left">${testNotice()}</div>` : ''}
+    ${isTest(p) ? `<div style="max-width:560px;margin:20px auto 0;text-align:left">${testNotice(p)}</div>` : t.pledge.card ? `<p class="muted" style="margin-top:14px">${icon('lock', 'sm')} Your ${esc(cardText(t.pledge.card))} is saved with Stripe and charged only if the project is funded.</p>` : ''}
     <div class="row" style="justify-content:center;margin-top:24px"><button class="btn primary" data-act="share" data-slug="${p.slug}" data-title="${esc(p.title)}">${icon('share')}Share this project</button><a class="btn ghost" href="#/p/${p.slug}">Back to project</a></div>
   </div><section class="section" id="more-like"></section></div>`);
   try {
@@ -885,7 +943,8 @@ function edStep() {
       ${p.status === 'live' ? `<section class="ed-sec" style="margin-top:32px"><h3 style="font-size:20px;margin-bottom:8px">Cancel this campaign</h3><p class="muted" style="margin-bottom:14px">Backers are told, and no pledges are collected. This can’t be undone.</p><button class="btn danger" data-act="proj-cancel">Cancel campaign</button></section>` : ''}`;
   }
   return `<h2>Launch</h2><p class="lede">Check everything over, then go live. Once you launch, the goal and duration are locked.</p>
-    <div class="checklist">${p.checklist.map(x => `<a class="${x.ok ? 'ok' : ''}" href="#/edit/${p.id}/${x.step}"><span class="tick">${x.ok ? icon('check') : ''}</span><span>${esc(x.label)}</span><span class="go">${x.ok ? '' : icon('chevR')}</span></a>`).join('')}</div>
+    ${p.payments === 'stripe' ? `<div class="notice" style="margin-bottom:16px">${icon('lock')}<div><b>Real payments.</b> Backers save a card with Stripe and are charged only if you reach your goal. Groundswell keeps ${CONF.fee_bps / 100}%, and Stripe pays the rest out to your bank.</div></div>` : ''}
+    <div class="checklist">${p.checklist.map(x => `<a class="${x.ok ? 'ok' : ''}" href="${x.step === 'payouts' ? '#/settings' : `#/edit/${p.id}/${x.step}`}"><span class="tick">${x.ok ? icon('check') : ''}</span><span>${esc(x.label)}</span><span class="go">${x.ok ? '' : icon('chevR')}</span></a>`).join('')}</div>
     <div class="panel"><div class="summary"><div><span>Goal</span><b>${money(p.goal, p.currency)}</b></div><div><span>Duration</span><b>${plural(p.duration, 'day')}</b></div><div><span>Ends if launched now</span><b>${fmtDateTime(new Date(now() + p.duration * 864e5).toISOString())}</b></div><div><span>Rewards</span><b>${p.rewards.length}</b></div></div></div>
     <div class="row" style="margin-top:20px"><button class="btn primary lg" data-act="launch" ${ready ? '' : 'disabled'}>${icon('rocket')}Launch project</button>
       <button class="btn ghost" data-act="copy-preview" data-url="${esc(projectUrl(p.slug) + '?preview=' + p.preview_key)}">${icon('link')}Copy preview link</button></div>
@@ -1004,14 +1063,16 @@ function renderDash(tab) {
         <div class="kpi"><div class="l">Average pledge</div><div class="v">${money(avg, cur)}</div><div class="d">${plural(d.saves, 'person', 'people')} saved it</div></div>
         <div class="kpi"><div class="l">${live ? 'Time left' : 'Ended'}</div><div class="v">${live ? `${t.n} ${t.unit}` : fmtDate(p.ended_at, { month: 'short', day: 'numeric' })}</div><div class="d">${live ? `Ends ${fmtDate(p.deadline)}` : p.status}</div></div>
       </div>
+      ${afterPanels(d) ? `<div class="dash-grid">${afterPanels(d)}</div>` : ''}
       <div class="dash-grid">
         <div class="panel"><div class="row between"><h2 style="margin:0">Funding over time</h2><button class="btn quiet sm" data-act="dash-table">Show as table</button></div><p class="muted small" style="margin:4px 0 14px">Total pledged since launch, against your goal.</p><div class="chart" id="chart"></div><div id="chart-table" hidden></div></div>
         <div class="panel"><h2>Backers by reward</h2><div class="hbars">${rw.map(r => `<div class="hbar"><div class="t"><span>${esc(r.name)}</span><span class="num">${r.n.toLocaleString()}</span></div><div class="track"><i style="width:${(r.n / maxN) * 100}%"></i></div></div>`).join('')}</div></div>
       </div>`;
   } else if (tab === 'backers') {
     body = `<div class="row between" style="margin:20px 0 14px"><p class="muted">${plural(d.backers.length, 'backer')}${d.canceled ? ` · ${d.canceled} canceled` : ''}</p>${d.backers.length ? `<button class="btn ghost sm" data-act="csv">${icon('download', 'sm')}Download CSV</button>` : ''}</div>
-      ${d.backers.length ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>Backer</th><th>Reward</th><th class="r">Pledge</th><th>Date</th><th>Status</th></tr></thead><tbody>
-        ${d.backers.map(b => `<tr><td class="num">${b.no}</td><td>${b.user.username ? `<a href="#/u/${esc(b.user.username)}">${esc(b.user.name)}</a>` : esc(b.user.name)}</td><td>${esc(b.reward || 'No reward')}</td><td class="r num">${money(b.amount, cur)}</td><td>${fmtDate(b.at)}</td><td>${pledgeStatus(b.status)}</td></tr>`).join('')}
+      ${d.survey.sent_at ? '' : afterPanels(d)}
+      ${d.backers.length ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>Backer</th><th>Reward</th><th class="r">Pledge</th><th>Date</th><th>Status</th>${d.survey.sent_at ? '<th>Ship to</th>' : ''}</tr></thead><tbody>
+        ${d.backers.map(b => `<tr><td class="num">${b.no}</td><td>${b.user.username ? `<a href="#/u/${esc(b.user.username)}">${esc(b.user.name)}</a>` : esc(b.user.name)}</td><td>${esc(b.reward || 'No reward')}</td><td class="r num">${money(b.amount, cur)}</td><td>${fmtDate(b.at)}</td><td>${pledgeStatus({ status: b.status, charge_status: b.charge }, p.payments)}</td>${d.survey.sent_at ? `<td style="white-space:normal;min-width:180px">${b.address ? esc([b.address.name, b.address.line1, b.address.line2, b.address.city, b.address.region, b.address.postal, b.address.country].filter(Boolean).join(', ')) : b.ships ? '<span class="muted">Waiting</span>' : '<span class="muted">\u2014</span>'}</td>` : ''}</tr>`).join('')}
       </tbody></table></div>` : '<div class="empty"><h3>No backers yet</h3><p>Share your project to get the word out.</p></div>'}`;
   } else {
     const e = DASH.editing && d.updates.find(u => u.id === DASH.editing);
@@ -1040,7 +1101,29 @@ function drawChart() {
   bindChart();
 }
 window.addEventListener('resize', debounce(() => { if (DASH && $('#chart') && !$('#chart').hidden) drawChart(); }, 150));
-const pledgeStatus = s => ({ active: '<span class="tag">Active</span>', collected: `<span class="tag good">Collected${TEST_MODE ? ' (test)' : ''}</span>`, dropped: '<span class="tag">Not collected</span>', canceled: '<span class="tag bad">Canceled</span>' }[s] || esc(s));
+function pledgeStatus(pl, payments) {
+  if (payments === 'stripe' && pl.charge_status) return { due: '<span class="tag">Charging soon</span>', processing: '<span class="tag">Charging</span>', paid: '<span class="tag good">Paid</span>', failed: '<span class="tag bad">Payment failed</span>', abandoned: '<span class="tag bad">Dropped</span>' }[pl.charge_status];
+  return { active: '<span class="tag">Active</span>', collected: `<span class="tag good">Collected${payments === 'stripe' ? '' : ' (test)'}</span>`, dropped: '<span class="tag">Not collected</span>', canceled: '<span class="tag bad">Canceled</span>' }[pl.status] || esc(pl.status);
+}
+// Payments and shipping survey panels for a finished project.
+function afterPanels(d) {
+  const p = d.project, cur = p.currency, pay = d.payments, sv = d.survey;
+  let out = '';
+  if (p.status === 'successful' && pay.mode === 'stripe') {
+    const fee = Math.floor(pay.paid * pay.fee_bps / 10000);
+    out += `<div class="panel"><h2>Payments</h2><div class="summary">
+      <div><span>Collected from ${plural(pay.paid_count, 'backer')}</span><b>${money(pay.paid, cur)}</b></div>
+      <div><span>Groundswell fee (${pay.fee_bps / 100}%)</span><span>\u2212${money(fee, cur)}</span></div>
+      <div class="total"><span>Paid out to your Stripe account</span><span>${money(pay.paid - fee, cur)}</span></div></div>
+      <p class="muted small" style="margin-top:12px">${pay.pending_count ? `${plural(pay.pending_count, 'card')} still being charged. ` : ''}${pay.failed_count ? `${plural(pay.failed_count, 'backer')} need to update their card (they have 7 days). ` : ''}${pay.abandoned_count ? `${plural(pay.abandoned_count, 'pledge')} dropped after failed payments. ` : ''}Stripe pays out to your bank on its usual schedule.</p></div>`;
+  }
+  if (p.status === 'successful' && sv.shipping > 0) {
+    out += `<div class="panel"><h2>Shipping survey</h2>${sv.sent_at
+      ? `<p>Sent ${fmtDate(sv.sent_at)}. <b>${sv.answered} of ${sv.shipping}</b> backers have entered an address. Addresses are in the backer list and the CSV.</p>`
+      : `<p class="muted" style="margin-bottom:14px">${plural(sv.shipping, 'backer')} chose a reward that ships. Ask them where to send it.</p><button class="btn primary" data-act="survey-send">${icon('truck')}Send shipping survey</button>`}</div>`;
+  }
+  return out;
+}
 // Daily cumulative totals from launch to today (or the end date).
 function dailySeries(d) {
   const p = d.project, day = 864e5;
@@ -1108,8 +1191,9 @@ function bindChart() {
 function csvDownload() {
   const d = DASH.d, cur = d.project.currency;
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = [['Backer #', 'Name', 'Username', 'Reward', `Pledge (${cur})`, `Shipping (${cur})`, 'Status', 'Date'].map(q).join(',')]
-    .concat(d.backers.map(b => [b.no, b.user.name, b.user.username || '', b.reward || 'No reward', (b.amount / 100).toFixed(2), (b.shipping / 100).toFixed(2), b.status, b.at].map(q).join(',')));
+  const A = ['name', 'line1', 'line2', 'city', 'region', 'postal', 'country', 'phone'];
+  const rows = [['Backer #', 'Name', 'Username', 'Reward', `Pledge (${cur})`, `Shipping (${cur})`, 'Status', 'Payment', 'Date', ...A.map(k => `Ship to: ${k}`)].map(q).join(',')]
+    .concat(d.backers.map(b => [b.no, b.user.name, b.user.username || '', b.reward || 'No reward', (b.amount / 100).toFixed(2), (b.shipping / 100).toFixed(2), b.status, b.charge || '', b.at, ...A.map(k => b.address ? b.address[k] : '')].map(q).join(',')));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
   a.download = `${d.project.slug}-backers.csv`; document.body.append(a); a.click(); a.remove();
@@ -1141,7 +1225,7 @@ async function pageMe(ctx) {
   if (tab === 'saved') body = d.saved.length ? cards(d.saved) : '<div class="empty"><h3>No saved projects</h3><p>Tap the bookmark on any project and we’ll remind you 48 hours before it ends.</p><a class="btn primary" href="#/explore">Discover projects</a></div>';
   else if (tab === 'created') body = d.created.length ? `<div class="cards">${d.created.map(c => `<div style="display:flex;flex-direction:column">${card(c, { href: c.status === 'draft' ? `#/edit/${c.id}/basics` : null })}<div class="row" style="margin-top:12px">${c.status === 'draft' ? `<a class="btn dark sm" href="#/edit/${c.id}/basics">Continue editing</a>` : `<a class="btn dark sm" href="#/dash/${c.id}">${icon('chart', 'sm')}Dashboard</a><a class="btn ghost sm" href="#/edit/${c.id}/basics">Edit</a>`}</div></div>`).join('')}</div>`
     : '<div class="empty"><h3>You haven’t started a project</h3><p>Have an idea? Drafts are private until you launch.</p><a class="btn primary" href="#/start">Start a project</a></div>';
-  else body = d.backed.length ? `<div class="cards">${d.backed.map(c => `<div style="display:flex;flex-direction:column">${card(c)}<div class="panel" style="margin-top:12px;padding:12px 14px"><div class="row between"><b>${money(c.pledge.amount, c.currency)}</b>${pledgeStatus(c.pledge.status)}</div><div class="muted small">${c.pledge.reward ? esc(c.pledge.reward) : 'No reward'} · backer #${c.pledge.backer_no}</div>${c.status === 'live' && c.pledge.status === 'active' ? `<a class="btn ghost sm" style="margin-top:10px" href="#/p/${c.slug}/pledge">Manage pledge</a>` : ''}</div></div>`).join('')}</div>`
+  else body = d.backed.length ? `<div class="cards">${d.backed.map(c => `<div style="display:flex;flex-direction:column">${card(c)}<div class="panel" style="margin-top:12px;padding:12px 14px"><div class="row between"><b>${money(c.pledge.amount, c.currency)}</b>${pledgeStatus(c.pledge, c.payments)}</div><div class="muted small">${c.pledge.reward ? esc(c.pledge.reward) : 'No reward'} · backer #${c.pledge.backer_no}</div>${c.status === 'live' && c.pledge.status === 'active' ? `<a class="btn ghost sm" style="margin-top:10px" href="#/p/${c.slug}/pledge">Manage pledge</a>` : ''}</div></div>`).join('')}</div>`
     : '<div class="empty"><h3>You haven’t backed anything yet</h3><p>Find something you’d love to see exist.</p><a class="btn primary" href="#/explore">Discover projects</a></div>';
   setMain(`<div class="wrap page"><h1 class="page-title">Your projects</h1>
     <nav class="tabs" style="margin:16px 0 24px" aria-label="Your projects"><a href="#/me" ${tab === 'backed' ? 'aria-current="page"' : ''}>Backed<span class="count">${d.backed.length}</span></a><a href="#/me/saved" ${tab === 'saved' ? 'aria-current="page"' : ''}>Saved<span class="count">${d.saved.length}</span></a><a href="#/me/created" ${tab === 'created' ? 'aria-current="page"' : ''}>Created<span class="count">${d.created.length}</span></a></nav>
@@ -1158,9 +1242,12 @@ function noteText(n) {
     case 'reply': return `${a} replied to your comment on ${t}: “${esc(x.excerpt)}”`;
     case 'ended':
       if (x.role === 'creator') return x.result === 'successful' ? `Your project ${t} was successfully funded with ${money(n.project.pledged, n.project.currency)}!` : `Your project ${t} didn’t reach its goal. No backers were charged.`;
-      return x.result === 'successful' ? `${t} was successfully funded. ${TEST_MODE ? 'Your pledge was collected (test mode, no money moved).' : 'Your pledge was collected.'}` : `${t} didn’t reach its goal. Your pledge was not collected.`;
+      return x.result === 'successful' ? `${t} was successfully funded. ${x.payments === 'stripe' ? 'Your card will be charged shortly.' : 'Your pledge was collected (test mode, no money moved).'}` : `${t} didn’t reach its goal. Your pledge was not collected.`;
     case 'canceled': return `The creator canceled ${t}. Your pledge was not collected.`;
     case 'ending_soon': return `${t}, which you saved, ends in less than 48 hours.`;
+    case 'survey': return `${t} is getting ready to ship. Enter your shipping address.`;
+    case 'payment_failed': return `Your payment for ${t} didn\u2019t go through. Update your card within 7 days to keep your pledge.`;
+    case 'charged': return `Your card was charged ${money(x.amount || 0, n.project.currency)} for ${t}. Thank you!`;
     default: return t;
   }
 }
@@ -1200,9 +1287,10 @@ function authPage(kind, ctx) {
       <button class="btn primary block lg" type="submit">Create account</button>
       <p class="hint" style="text-align:center;margin-top:12px">By signing up you agree to the <a href="terms.html">Terms</a> and <a href="privacy.html">Privacy policy</a>. No email needed.</p></form>
       <p class="alt">Already have an account? <a href="#/login?next=${nx}">Log in</a></p>`,
-    forgot: `<h1>Reset your password</h1><p class="lede">Use the recovery code you saved when you signed up.</p>
-      <form data-form="forgot"><label class="field"><span>Username</span><input class="input" name="username" autocapitalize="none" spellcheck="false" required></label>
-      <label class="field"><span>Recovery code</span><input class="input" name="code" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" required></label>
+    forgot: `<h1>Reset your password</h1><p class="lede">Use a code we email you, or the recovery code you saved when you signed up.</p>
+      <form data-form="forgot"><label class="field"><span>Username</span><input class="input" name="username" autocapitalize="none" spellcheck="false" required value="${esc(ctx.q.username || '')}"></label>
+      <p class="hint" style="margin:-8px 0 16px"><button type="button" class="linkbtn" data-act="reset-email">Email me a code</button> (works if your account has a confirmed email)</p>
+      <label class="field"><span>Code</span><input class="input" name="code" autocapitalize="characters" spellcheck="false" placeholder="Emailed code or recovery code" required></label>
       <label class="field"><span>New password</span><input class="input" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required></label>
       <button class="btn primary block lg" type="submit">Reset password</button></form>
       <p class="alt"><a href="#/login?next=${nx}">Back to log in</a></p>`,
@@ -1212,7 +1300,7 @@ function authPage(kind, ctx) {
 }
 function showRecovery(code, then) {
   const m = modal(`<h2>Save your recovery code</h2>
-    <p class="muted" style="margin-bottom:14px">Groundswell doesn’t use email. If you forget your password, this code is the only way back into your account. Keep it somewhere safe, like a password manager.</p>
+    <p class="muted" style="margin-bottom:14px">If you forget your password, this code gets you back into your account. Keep it somewhere safe, like a password manager. You can also add an email in Settings for password resets.</p>
     <div class="code">${esc(code)}</div>
     <div class="row" style="margin-top:12px"><button class="btn ghost sm" data-act="copy" data-text="${esc(code)}">${icon('copy', 'sm')}Copy</button><button class="btn ghost sm" data-act="download-code" data-text="${esc(code)}">${icon('download', 'sm')}Download</button></div>
     <label class="check" style="margin-top:18px"><input type="checkbox" id="saved-ok"><span>I’ve saved my recovery code</span></label>
@@ -1220,9 +1308,27 @@ function showRecovery(code, then) {
   $('#saved-ok', m.el).addEventListener('change', e => { $('#rc-done', m.el).disabled = !e.target.checked; });
   $('#rc-done', m.el).addEventListener('click', () => m.close());
 }
-function pageSettings(ctx) {
+async function pageSettings(ctx) {
   if (!S.token) return needLogin('/settings');
-  const u = S.me, theme = store.get('gs.theme', 'system');
+  if (ctx.q && ctx.q.stripe) {
+    try { const st = await gsFn('pay', { action: 'connect_refresh' }); await refreshUnread(); toast(st.ready ? 'Stripe is connected. You can launch projects.' : 'Stripe still needs a few details from you.'); }
+    catch (e) { toast(e.message, 'bad'); }
+    if (ctx.stale && ctx.stale()) return;
+  }
+  const u = S.me, theme = store.get('gs.theme', 'system'), st = u.stripe || {};
+  const emailPanel = `<div class="panel" id="email"><h2>Email</h2>
+    ${u.email ? `<p>Emails go to <b>${esc(u.email)}</b>. <button class="linkbtn" data-act="email-remove">Remove</button></p>
+      <label class="check" style="margin-top:14px"><input type="checkbox" data-setting="email_notify" ${u.email_notify ? 'checked' : ''}><span>Email me about updates, replies and project results</span></label>`
+    : u.email_pending ? `<form data-form="email-verify"><p style="margin-bottom:12px">We sent a 6-digit code to <b>${esc(u.email_pending)}</b>.</p>
+      <div class="row" style="align-items:flex-end"><label class="field" style="flex:1;margin:0;min-width:160px"><span>Code</span><input class="input" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required></label><button class="btn primary" type="submit">Confirm</button></div>
+      <p class="hint"><button type="button" class="linkbtn" data-act="email-resend" data-email="${esc(u.email_pending)}">Send a new code</button></p></form>`
+    : `<p class="muted" style="margin-bottom:14px">Add an email to hear from projects you back, and to reset your password if you forget it.</p>
+      <form data-form="email-set" class="row" style="align-items:flex-end"><label class="field" style="flex:1;margin:0;min-width:200px"><span>Email</span><input class="input" type="email" name="email" autocomplete="email" required></label><button class="btn primary" type="submit">Send code</button></form>`}
+    ${CONF.email ? '' : '<p class="hint">Email isn\u2019t switched on for this site yet, so codes won\u2019t arrive until it is.</p>'}</div>`;
+  const payoutsPanel = CONF.stripe || st.connected ? `<div class="panel" id="payouts"><h2>Payouts</h2>
+    ${st.ready ? `<p>${icon('check')} Stripe is connected. Money from your funded projects is paid out to your bank by Stripe.</p><div class="row" style="margin-top:12px"><button class="btn ghost" data-act="stripe-dashboard">${icon('ext')}Open Stripe dashboard</button></div>`
+    : st.connected ? `<p class="muted" style="margin-bottom:14px">Finish setting up your Stripe account to launch projects and get paid.</p><div class="row"><button class="btn primary" data-act="stripe-connect">Continue Stripe setup</button><button class="btn ghost" data-act="stripe-refresh">I\u2019ve finished</button></div>`
+    : `<p class="muted" style="margin-bottom:14px">To launch a project you need a Stripe account. Stripe checks your identity and pays out what you raise to your bank, minus the Groundswell fee of ${CONF.fee_bps / 100}%.</p><button class="btn primary" data-act="stripe-connect">Connect with Stripe</button>`}</div>` : '';
   setMain(`<div class="wrap page narrow"><h1 class="page-title">Settings</h1>
     <div class="panel" style="margin-top:20px"><h2>Profile</h2>
       <form data-form="profile">
@@ -1233,6 +1339,7 @@ function pageSettings(ctx) {
         <label class="check" style="margin-bottom:18px"><input type="checkbox" name="show_backed" ${u.show_backed ? 'checked' : ''}><span>Show the projects I back on my public profile</span></label>
         <button class="btn primary" type="submit">Save profile</button>
       </form></div>
+    ${emailPanel}${payoutsPanel}
     <div class="panel"><h2>Appearance</h2><div class="row">${[['system', 'Match device'], ['light', 'Light'], ['dark', 'Dark']].map(([k, v]) => `<button class="chip ${theme === k ? 'on' : ''}" data-act="theme" data-theme="${k}" aria-pressed="${theme === k}">${v}</button>`).join('')}</div></div>
     <div class="panel"><h2>Password</h2>
       <form data-form="password"><label class="field"><span>Current password</span><input class="input" type="password" name="old" autocomplete="current-password" required></label>
@@ -1260,10 +1367,20 @@ function pageHow() {
       <ul><li><b>Draft privately.</b> Write your story, set your goal, and build rewards. Share a private preview link for feedback.</li>
         <li><b>Launch for 1 to 60 days.</b> Your goal and deadline are fixed at launch so backers know exactly what they’re supporting.</li>
         <li><b>Keep backers in the loop.</b> Your dashboard shows funding over time, reward choices and every backer, and lets you post updates.</li></ul>
-      ${TEST_MODE ? '<h2>Test mode</h2><p>This Groundswell is running in <b>test mode</b>. Pledges are recorded and count toward goals exactly like real ones, but no card is taken and no money moves. It’s the way to try the whole experience before payments are switched on.</p>' : ''}
+      ${testSite() ? '<h2>Test mode</h2><p>This Groundswell is running in <b>test mode</b>. Pledges are recorded and count toward goals exactly like real ones, but no card is taken and no money moves. It’s the way to try the whole experience before payments are switched on.</p>'
+        : `<h2>Payments</h2><p>Pledges are handled by <b>Stripe</b>. When you back a project you save a card on Stripe’s secure page, and it’s charged only if the project reaches its goal. If a charge fails, you have 7 days to update your card. Creators are paid out by Stripe, minus a ${CONF.fee_bps / 100}% Groundswell fee.</p>`}
       <h2>Trust and safety</h2>
       <p>If a project looks wrong, use <b>Report this project</b> at the bottom of its page. Moderators review reports and can hide projects that break the rules.</p>
     </div><p style="margin-top:28px"><a class="btn primary" href="#/start">Start a project</a> <a class="btn ghost" href="#/explore">Discover projects</a></p></div>`);
+}
+function adminSettings(s) {
+  return `<div class="panel" style="margin-top:20px"><h2>Payments and email</h2>
+    <div class="switch"><div><b>Payments</b><div class="muted small">${s.stripe_ready ? 'Stripe is connected. Projects launched in Real mode take real money.' : 'Add your Stripe keys to switch on real payments (see the README).'}</div></div>
+      <div class="row"><button class="chip ${s.payments !== 'stripe' ? 'on' : ''}" data-act="adm-pay" data-mode="test" aria-pressed="${s.payments !== 'stripe'}">Test</button><button class="chip ${s.payments === 'stripe' ? 'on' : ''}" data-act="adm-pay" data-mode="stripe" aria-pressed="${s.payments === 'stripe'}" ${s.stripe_ready ? '' : 'disabled'}>Real (Stripe)</button></div></div>
+    <form class="switch" data-form="adm-fee"><div><b>Platform fee</b><div class="muted small">Kept from each successful charge; the rest goes to the creator.</div></div>
+      <div class="row"><input class="input" name="fee" inputmode="decimal" style="width:84px" value="${s.fee_bps / 100}" aria-label="Fee percent"><span>%</span><button class="btn ghost sm" type="submit">Save</button></div></form>
+    <div class="switch" style="border-bottom:0"><div><b>Email</b><div class="muted small">${s.email_ready ? `Sending through Resend. ${s.emails_queued} queued${s.emails_failed ? `, ${s.emails_failed} failed this week` : ''}.` : 'Add a Resend API key to send email (see the README).'}</div></div><span class="tag ${s.email_ready ? 'good' : ''}">${s.email_ready ? 'On' : 'Off'}</span></div>
+    ${s.charges_failed ? `<p class="muted small">${plural(s.charges_failed, 'charge')} waiting for backers to update their card.</p>` : ''}</div>`;
 }
 async function pageAdmin(ctx) {
   if (!S.token) return needLogin('/admin');
@@ -1272,6 +1389,7 @@ async function pageAdmin(ctx) {
   if (ctx.stale()) return;
   setMain(`<div class="wrap page"><h1 class="page-title">Moderation</h1>
     <p class="muted">${plural(d.stats.users, 'member')} · ${plural(d.stats.samples, 'sample project')}</p>
+    ${adminSettings(d.settings)}
     <div class="panel" style="margin-top:20px"><h2>Reports</h2>${d.reports.length ? `<div class="table-wrap"><table><thead><tr><th>Project</th><th>Reason</th><th>From</th><th>When</th><th></th></tr></thead><tbody>
       ${d.reports.map(r => `<tr><td><a href="#/p/${r.project.slug}">${esc(r.project.title)}</a>${r.project.hidden ? ' <span class="tag">Hidden</span>' : ''}</td><td style="white-space:normal;min-width:240px">${esc(r.reason)}</td><td>${esc(r.by.name)}</td><td>${ago(r.at)}</td><td>${r.resolved ? '<span class="tag good">Resolved</span>' : `<button class="btn ghost sm" data-act="adm-resolve" data-id="${r.id}">Resolve</button>`}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No reports.</p>'}</div>
     <div class="panel"><h2>Projects</h2><div class="table-wrap"><table><thead><tr><th>Project</th><th>Status</th><th>Featured</th><th>Hidden</th></tr></thead><tbody>
@@ -1308,6 +1426,38 @@ const ACT = {
     });
   },
   share: btn => share(btn.dataset.title, projectUrl(btn.dataset.slug)),
+  'fix-card': btn => busy(btn, () => startCheckout({ pledge: btn.dataset.pledge }, btn.dataset.slug)),
+  address: btn => {
+    const c = PCACHE.get(btn.dataset.slug), a = (c && c.d.me.address) || {}, f = (k, label, req = true, ac = '') => `<label class="field"><span>${label}${req ? '' : ' <small>optional</small>'}</span><input class="input" name="${k}" ${req ? 'required' : ''} ${ac ? `autocomplete="${ac}"` : ''} value="${esc(a[k] || '')}"></label>`;
+    const m = modal(`<h2>Shipping address</h2><p class="muted" style="margin-bottom:14px">Only the creator of this project can see it.</p>
+      <form data-form="address" data-id="${btn.dataset.id}" data-slug="${btn.dataset.slug}">${f('name', 'Full name', true, 'name')}${f('line1', 'Street address', true, 'address-line1')}${f('line2', 'Apartment, suite', false, 'address-line2')}
+      <div class="grid2">${f('city', 'City', true, 'address-level2')}${f('region', 'Province or state', false, 'address-level1')}</div>
+      <div class="grid2">${f('postal', 'Postal code', false, 'postal-code')}${f('country', 'Country', true, 'country-name')}</div>${f('phone', 'Phone (for the courier)', false, 'tel')}
+      <div class="acts"><button type="button" class="btn ghost" data-close>Cancel</button><button type="submit" class="btn primary">Save address</button></div></form>`);
+    $('form', m.el)._close = m.close;
+  },
+  async 'survey-send'(btn) {
+    if (!await confirmBox('Send the shipping survey?', 'Backers whose reward ships will be asked for their address. You can only send it once.', { ok: 'Send survey' })) return;
+    await busy(btn, async () => { const r = await rpc('gs_survey_send', { project: DASH.d.project.id }); DASH.d = await rpc('gs_dashboard', { project: DASH.d.project.id }); toast(`Survey sent to ${plural(r.sent, 'backer')}`); renderDash(DASH.tab); });
+  },
+  'stripe-connect': btn => busy(btn, async () => { const r = await gsFn('pay', { action: 'connect' }); await openOut(r.url); }),
+  'stripe-refresh': btn => busy(btn, async () => { const r = await gsFn('pay', { action: 'connect_refresh' }); await refreshUnread(); toast(r.ready ? 'Stripe is connected.' : 'Stripe still needs a few details from you.'); pageSettings({ q: {} }); }),
+  'stripe-dashboard': btn => busy(btn, async () => { const r = await gsFn('pay', { action: 'dashboard' }); await openOut(r.url); }),
+  async 'email-remove'(btn) {
+    if (!await confirmBox('Remove your email?', 'You\u2019ll stop getting emails, and you\u2019ll need your recovery code to reset your password.', { ok: 'Remove', danger: true })) return;
+    await busy(btn, async () => { const r = await rpc('gs_email_remove'); setMe(r.me); pageSettings({ q: {} }); });
+  },
+  'email-resend': btn => busy(btn, async () => { await rpc('gs_email_set', { email: btn.dataset.email }); toast('New code sent'); }),
+  'reset-email': btn => {
+    const f = btn.closest('form'), u = f.username.value.trim();
+    if (!u) { f.username.focus(); return toast('Enter your username first.', 'bad'); }
+    busy(btn, async () => { await rpc('gs_reset_request', { username: u }, { auth: false }); toast(`If @${u} has a confirmed email, a code is on its way.`); f.code.focus(); });
+  },
+  async 'adm-pay'(btn) {
+    const mode = btn.dataset.mode;
+    if (mode === 'stripe' && !await confirmBox('Switch on real payments?', 'Projects launched from now on take real money through Stripe. Projects already live stay in test mode.', { ok: 'Switch on' })) return;
+    await busy(btn, async () => { await rpc('gs_admin_settings', { patch: { payments: mode } }); await loadConfig(); route(); });
+  },
   'copy-preview': btn => copyText(btn.dataset.url, 'Preview link copied'),
   copy: btn => copyText(btn.dataset.text, 'Copied'),
   'download-code': btn => {
@@ -1454,7 +1604,8 @@ const FORM = {
     if (r.error) throw new Error(r.error);
     setSession(r.token, r.me);
     const next = parseHash().q.next || '/';
-    showRecovery(r.recovery, () => { toast('Password reset. You’re logged in.'); go(next); });
+    if (r.recovery) showRecovery(r.recovery, () => { toast('Password reset. You’re logged in.'); go(next); });
+    else { toast('Password reset. You’re logged in.'); go(next); }
   }),
   start: f => submitting(f, async () => {
     if (!f.category.value) throw new Error('Pick a category first.');
@@ -1476,6 +1627,7 @@ const FORM = {
   pledge: f => submitting(f, async () => {
     const { d, sel } = PL;
     const r = await rpc('gs_pledge', { project: d.project.id, reward: sel === 'none' ? null : sel, amount: plTotal() });
+    if (r.needs_card) { await startCheckout({ intent: r.intent }, d.project.slug); return; }
     PCACHE.delete(d.project.slug);
     if (PL.mine) { toast('Your pledge was updated'); go('/p/' + d.project.slug); return; }
     THANKS = { slug: d.project.slug, project: r.project, pledge: r.pledge };
@@ -1493,6 +1645,22 @@ const FORM = {
     await rpc('gs_update_post', { project: p.id, id: f.dataset.id || null, title: f.title.value, body: $('textarea[data-field="body"]', f).value, backers_only: f.backers_only.checked });
     toast(f.dataset.id ? 'Update saved' : 'Update posted. Your backers have been notified.');
     DASH.editing = null; DASH.d = await rpc('gs_dashboard', { project: p.id }); PCACHE.delete(p.slug); renderDash('updates');
+  }),
+  address: f => submitting(f, async () => {
+    const a = Object.fromEntries(['name', 'line1', 'line2', 'city', 'region', 'postal', 'country', 'phone'].map(k => [k, f[k].value]));
+    await rpc('gs_address_save', { project: f.dataset.id, address: a });
+    f._close(); PCACHE.delete(f.dataset.slug); toast('Address saved'); route();
+  }),
+  'email-set': f => submitting(f, async () => { await rpc('gs_email_set', { email: f.email.value }); await refreshUnread(); toast('Code sent. Check your email.'); pageSettings({ q: {} }); }),
+  'email-verify': f => submitting(f, async () => {
+    const r = await rpc('gs_email_verify', { code: f.code.value });
+    if (r.error) throw new Error(r.error);
+    setMe(r.me); toast('Email confirmed'); pageSettings({ q: {} });
+  }),
+  'adm-fee': f => submitting(f, async () => {
+    const pct = parseFloat(String(f.fee.value).replace(',', '.'));
+    if (!Number.isFinite(pct)) throw new Error('Enter a percentage, like 8.');
+    await rpc('gs_admin_settings', { patch: { fee_bps: Math.round(pct * 100) } }); await loadConfig(); toast('Fee saved'); route();
   }),
   profile: f => submitting(f, async () => { setMe(await rpc('gs_profile_save', { patch: { name: f.name.value, location: f.location.value, bio: f.bio.value, show_backed: f.show_backed.checked } })); toast('Profile saved'); }),
   password: f => submitting(f, async () => { await rpc('gs_password_change', { old: f.old.value, new: f.new.value }); f.reset(); toast('Password changed'); }),
@@ -1541,6 +1709,7 @@ document.addEventListener('change', async e => {
     return;
   }
   if (t.tagName === 'SELECT' && t.form && t.form.dataset.form === 'explore') { FORM.explore(t.form); return; }
+  if (t.dataset.setting === 'email_notify') { try { setMe(await rpc('gs_profile_save', { patch: { email_notify: t.checked } })); toast(t.checked ? 'Emails on' : 'Emails off'); } catch (e) { toast(e.message, 'bad'); } return; }
   if (!ED) return;
   if (t.dataset.field === 'category') queueSave({ category: t.value }, true);
   if (t.dataset.field === 'currency') { queueSave({ currency: t.value }, true); ED.p.currency = t.value; const s = $('[data-sym]'); if (s) s.textContent = curSymbol(t.value); }
@@ -1569,8 +1738,26 @@ setInterval(() => { if (!document.hidden) refreshUnread(); }, 60000);
 window.addEventListener('offline', () => { if (!$('.offline')) document.body.insertAdjacentHTML('beforeend', '<div class="offline" role="status">You’re offline</div>'); });
 window.addEventListener('online', () => { const o = $('.offline'); if (o) o.remove(); });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+async function loadConfig() {
+  try { const c = await rpc('gs_config', {}, { auth: false }); const changed = c.payments !== CONF.payments || c.stripe !== CONF.stripe || c.email !== CONF.email; CONF = { ...CONF, ...c }; renderChrome(); return changed; }
+  catch { return false; }
+}
+if (NATIVE && PLUG.App) PLUG.App.addListener('appUrlOpen', e => {
+  // groundswell://return?to=/p/slug/paid&session=... from return-app.html
+  try {
+    const u = new URL(e.url), to = u.searchParams.get('to') || '/', session = u.searchParams.get('session');
+    if (PLUG.Browser) PLUG.Browser.close().catch(() => {});
+    if (to.startsWith('/') && !to.startsWith('//')) go(to + (session ? (to.includes('?') ? '&' : '?') + 'session=' + encodeURIComponent(session) : ''));
+  } catch { /* ignore malformed links */ }
+});
+if (NATIVE && PLUG.Browser) PLUG.Browser.addListener('browserFinished', () => {
+  const p = store.get('gs.paying');
+  if (p && p.intent && p.slug && Date.now() - p.at < 3600e3) go(`/p/${p.slug}/paid?intent=${p.intent}`);
+  else { PCACHE.clear(); route(); }
+});
 renderChrome();
 route();
 refreshUnread();
-window.__gs = { S, md, art, money, toCents, timeLeft, PCACHE }; // used by the browser tests
+loadConfig().then(changed => { if (changed && /^#\/(settings|how|admin|edit|p\/[^/]+\/pledge)/.test(location.hash)) route(); });
+window.__gs = { S, md, art, money, toCents, timeLeft, PCACHE, conf: () => CONF }; // used by the browser tests
 })();

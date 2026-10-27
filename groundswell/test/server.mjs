@@ -10,7 +10,9 @@ import { makePool, rpc } from './pgrpc.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../web');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
-export function startServer(port = 8098) {
+// Optional: pass the `gs` Edge Function's handler to serve it at /functions/v1/gs/*. Requests
+// bearing GS_SERVICE_KEY run database functions as service_role, like the real service key.
+export function startServer(port = 8098, { fn = null } = {}) {
   const pool = makePool();
   const files = new Map();
   const origin = `http://127.0.0.1:${port}`;
@@ -23,8 +25,15 @@ export function startServer(port = 8098) {
         if (req.method !== 'POST') return json(res, 405, { message: 'POST only' });
         if (!req.headers.apikey) return json(res, 401, { message: 'No API key found in request' });
         const args = JSON.parse((await body(req)).toString() || '{}');
-        const r = await rpc(pool, url.pathname.slice('/rest/v1/rpc/'.length), args);
+        const service = process.env.GS_SERVICE_KEY && req.headers.authorization === `Bearer ${process.env.GS_SERVICE_KEY}`;
+        const r = await rpc(pool, url.pathname.slice('/rest/v1/rpc/'.length), args, { role: service ? 'service_role' : 'anon' });
         return json(res, r.status, r.body);
+      }
+      if (fn && url.pathname.startsWith('/functions/v1/gs')) {
+        const data = await body(req);
+        const r = await fn(new Request(origin + req.url, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : data }));
+        res.writeHead(r.status, Object.fromEntries(r.headers));
+        return res.end(Buffer.from(await r.arrayBuffer()));
       }
       if (url.pathname.startsWith('/storage/v1/object/public/media/')) {
         const f = files.get(decodeURIComponent(url.pathname.slice('/storage/v1/object/public/media/'.length)));

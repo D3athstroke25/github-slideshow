@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Returning to Groundswell</title>
+<style>body{font:16px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif;max-width:520px;margin:0 auto;padding:48px 16px;color:#15181C;background:#FAF8F4;text-align:center}a{color:#A9330F}@media (prefers-color-scheme:dark){body{color:#EEF0F2;background:#111316}a{color:#F47E5D}}</style>
+<script>
+// Stripe sends people here after Checkout or payout setup; forward into the app.
+(function () {
+  var q = new URLSearchParams(location.search), to = q.get('to') || '/', s = q.get('session');
+  if (to.charAt(0) !== '/' || to.charAt(1) === '/') to = '/';
+  if (s && /^cs_[A-Za-z0-9_]+$/.test(s)) to += (to.indexOf('?') < 0 ? '?' : '&') + 'session=' + s;
+  location.replace('./#' + to);
+})();
+</script></head>
+<body><p>Returning to Groundswell…</p><p><a href="./">Continue</a></p></body></html>

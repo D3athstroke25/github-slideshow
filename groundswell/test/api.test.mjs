@@ -442,6 +442,207 @@ await block('deleting an account', async () => {
   ok('username can be reused', (await call('gs_signup', { p_username: 'zed', p_password: 'zedpassword2' })).status === 200);
 });
 
+const svc = (fn, args) => good(fn, args, { role: 'service_role' });
+const outbox = async (uid, template) => sql(`select * from outbox where user_id = $1 and template = $2 order by id`, [uid, template]);
+let eve, fay, gil;
+
+await block('email: confirm an address', async () => {
+  eve = await good('gs_signup', { p_username: 'eve', p_password: 'evepassword', p_name: 'Eve Creator' });
+  fay = await good('gs_signup', { p_username: 'fay', p_password: 'faypassword', p_name: 'Fay Backer' });
+  gil = await good('gs_signup', { p_username: 'gil', p_password: 'gilpassword', p_name: 'Gil' });
+  await bad('rejects a bad address', 'gs_email_set', { p_token: fay.token, p_email: 'not-an-email' }, /look like/);
+  const set = await good('gs_email_set', { p_token: fay.token, p_email: ' Fay@Example.com ' });
+  ok('code requested for the lowercased address', set.pending === 'fay@example.com' && set.email_ready === false, set);
+  const box = await outbox(fay.me.id, 'verify');
+  ok('verification email queued with a 6-digit code', box.length === 1 && /^\d{6}$/.test(box[0].data.code) && box[0].to_email === 'fay@example.com');
+  const me = await good('gs_me', { p_token: fay.token });
+  ok('profile shows the pending address, not a confirmed one', me.me.email === null && me.me.email_pending === 'fay@example.com');
+  const wrong = await good('gs_email_verify', { p_token: fay.token, p_code: '000000' === box[0].data.code ? '111111' : '000000' });
+  ok('wrong code returns an error and is counted', /isn.t right/.test(wrong.error) && (await sql(`select attempts from email_codes where user_id = $1`, [fay.me.id]))[0].attempts === 1);
+  const okv = await good('gs_email_verify', { p_token: fay.token, p_code: box[0].data.code.slice(0, 3) + ' ' + box[0].data.code.slice(3) });
+  ok('right code confirms the address', okv.me.email === 'fay@example.com' && okv.me.email_pending === null, okv);
+  await good('gs_email_set', { p_token: gil.token, p_email: 'gil@example.com' });
+  const g = await outbox(gil.me.id, 'verify');
+  await good('gs_email_verify', { p_token: gil.token, p_code: g[0].data.code });
+  const anonCall = await call('gs_svc_emails_claim', { p_limit: 5 });
+  ok('anon cannot claim emails', anonCall.status === 401);
+});
+
+await block('email: password reset by email', async () => {
+  const before = await sql(`select count(*)::int n from outbox where template = 'reset'`);
+  ok('unknown usernames get the same answer', (await good('gs_reset_request', { p_username: 'nobody-here' })).ok === true);
+  await good('gs_reset_request', { p_username: 'eve' });
+  ok('no email is sent for accounts without a confirmed address', (await sql(`select count(*)::int n from outbox where template = 'reset'`))[0].n === before[0].n);
+  await good('gs_reset_request', { p_username: 'FAY' });
+  const r = await outbox(fay.me.id, 'reset');
+  ok('reset code emailed', r.length === 1 && /^[A-Z0-9]{8}$/.test(r[0].data.code) && r[0].data.username === 'fay');
+  const wrong = await good('gs_password_reset', { p_username: 'fay', p_code: 'ZZZZZZZZ', p_new: 'newfaypass' });
+  ok('wrong reset code refused', !!wrong.error);
+  const done = await good('gs_password_reset', { p_username: 'fay', p_code: r[0].data.code.toLowerCase(), p_new: 'newfaypass' });
+  ok('emailed code resets the password and keeps the recovery code', done.token && done.recovery === null);
+  ok('recovery code still works afterwards', !!(await good('gs_password_reset', { p_username: 'fay', p_code: fay.recovery, p_new: 'faypassword' })).token);
+  const again = await good('gs_password_reset', { p_username: 'fay', p_code: r[0].data.code, p_new: 'another123' });
+  ok('emailed code works only once', !!again.error);
+  fay = { ...fay, token: (await good('gs_login', { p_username: 'fay', p_password: 'faypassword' })).token };
+});
+
+await block('settings and payment mode', async () => {
+  const c = await good('gs_config', {});
+  ok('starts in test mode with an 8% fee', c.payments === 'test' && c.fee_bps === 800 && c.stripe === false && c.email === false);
+  await sql(`update users set is_admin = true where username = 'eve'`);
+  await bad('only admins change settings', 'gs_admin_settings', { p_token: fay.token, p_patch: { payments: 'stripe' } }, /Admins/);
+  await bad('stripe needs keys first', 'gs_admin_settings', { p_token: eve.token, p_patch: { payments: 'stripe' } }, /Stripe keys/);
+  await bad('fee is bounded', 'gs_admin_settings', { p_token: eve.token, p_patch: { fee_bps: 5000 } }, /between 0% and 30%/);
+  await svc('gs_svc_tick', { p_email: true, p_stripe: true });
+  const a = await good('gs_admin_settings', { p_token: eve.token, p_patch: { payments: 'stripe', fee_bps: 500 } });
+  ok('admin switches to Stripe once it is configured', a.settings.payments === 'stripe' && a.settings.fee_bps === 500 && a.settings.stripe_ready);
+  const c2 = await good('gs_config', {});
+  ok('config reports stripe and email as ready', c2.payments === 'stripe' && c2.email && c2.stripe);
+  await svc('gs_svc_tick', { p_email: true, p_stripe: false });
+  ok('payments fall back to test while Stripe is not configured', (await good('gs_config', {})).payments === 'test');
+  await svc('gs_svc_tick', { p_email: true, p_stripe: true });
+});
+
+let sp, spReward, fayPledge;
+await block('stripe: pledging saves a card first', async () => {
+  let e = await good('gs_project_new', { p_token: eve.token, p_title: 'Stripe lamp', p_category: 'design' });
+  e = await good('gs_project_save', { p_token: eve.token, p_project: e.id, p_patch: { blurb: 'A lamp funded with real money.', story: STORY, risks: RISKS, goal_cents: 8000 } });
+  e = await good('gs_reward_save', { p_token: eve.token, p_project: e.id, p_reward: { title: 'Lamp', amount: 5000, ships: true, shipping: 1000 } });
+  e = await good('gs_reward_save', { p_token: eve.token, p_project: e.id, p_reward: { title: 'Sticker', amount: 500 } });
+  ok('checklist asks the creator to connect Stripe', e.checklist.some(x => x.key === 'payouts' && !x.ok) && e.payments === 'stripe');
+  await bad('launch blocked until Stripe is connected', 'gs_project_launch', { p_token: eve.token, p_project: e.id }, /connect stripe/i);
+  await svc('gs_svc_set_account', { p_uid: eve.me.id, p_account: 'acct_eve', p_ready: true });
+  sp = await good('gs_project_launch', { p_token: eve.token, p_project: e.id });
+  ok('project launches in Stripe mode', sp.status === 'live' && sp.payments === 'stripe');
+  spReward = sp.rewards.find(r => r.title === 'Lamp');
+  await bad('anon cannot call service functions', 'gs_svc_intent_complete', { p_intent: '00000000-0000-0000-0000-000000000000', p_customer: 'x', p_pm: 'x', p_brand: 'x', p_last4: 'x' }, /permission/);
+  await bad('intent still validates the minimum', 'gs_pledge', { p_token: fay.token, p_project: sp.id, p_reward: spReward.id, p_amount: 100 }, /minimum/);
+  const r = await good('gs_pledge', { p_token: fay.token, p_project: sp.id, p_reward: spReward.id, p_amount: 6500 });
+  ok('first pledge asks for a card instead of pledging', r.needs_card === true && r.intent);
+  ok('nothing counts until the card is saved', (await sql(`select backers_count from projects where id = $1`, [sp.id]))[0].backers_count === 0);
+  const t = await svc('gs_svc_checkout_target', { p_uid: fay.me.id, p_intent: r.intent, p_pledge: null });
+  ok('checkout target has amount and currency', t.kind === 'intent' && t.amount === 6500 && t.currency === 'USD' && t.slug === sp.slug);
+  ok('someone else cannot use the intent', (await svc('gs_svc_checkout_target', { p_uid: gil.me.id, p_intent: r.intent, p_pledge: null })) === null);
+  await svc('gs_svc_intent_session', { p_intent: r.intent, p_session: 'cs_test_1' });
+  const done = await svc('gs_svc_intent_complete', { p_intent: r.intent, p_customer: 'cus_fay', p_pm: 'pm_1', p_brand: 'visa', p_last4: '4242' });
+  ok('saving the card makes the pledge', done.pledge.backer_no === 1 && done.pledge.card.last4 === '4242' && done.project.backers === 1, done);
+  fayPledge = done.pledge.id;
+  ok('completing twice is harmless', (await svc('gs_svc_intent_complete', { p_intent: r.intent, p_customer: 'cus_fay', p_pm: 'pm_1', p_brand: 'visa', p_last4: '4242' })).done === true);
+  ok('customer id saved on the backer', (await sql(`select stripe_customer_id from users where id = $1`, [fay.me.id]))[0].stripe_customer_id === 'cus_fay');
+  const change = await good('gs_pledge', { p_token: fay.token, p_project: sp.id, p_reward: spReward.id, p_amount: 7000 });
+  ok('changing a pledge with a saved card applies right away', change.pledge && change.pledge.amount === 7000);
+  const view = await good('gs_project', { p_token: fay.token, p_slug: sp.slug });
+  ok('project page shows the card on file', view.me.pledge.card.brand === 'visa' && view.project.payments === 'stripe');
+  const g = await good('gs_pledge', { p_token: gil.token, p_project: sp.id, p_reward: null, p_amount: 2000 });
+  await svc('gs_svc_intent_complete', { p_intent: g.intent, p_customer: 'cus_gil', p_pm: 'pm_gil', p_brand: 'mastercard', p_last4: '4444' });
+  const fb = await svc('gs_svc_checkout_target', { p_uid: fay.me.id, p_intent: null, p_pledge: fayPledge });
+  ok('a live pledge can switch cards', fb.kind === 'fix' && fb.amount === 7000);
+});
+
+await block('stripe: charging after success', async () => {
+  await sql(`update projects set deadline = now() - interval '1 minute' where id = $1`, [sp.id]);
+  await good('gs_home', {});
+  const st = await sql(`select status, charge_status from pledges where project_id = $1 order by backer_no`, [sp.id]);
+  ok('funded Stripe project marks pledges due for charging', st.every(x => x.status === 'collected' && x.charge_status === 'due'), st);
+  const claim = await svc('gs_svc_charges_claim', { p_limit: 10 });
+  const fc = claim.find(c => c.pledge === fayPledge);
+  ok('claim returns what Stripe needs', claim.length === 2 && fc.customer === 'cus_fay' && fc.pm === 'pm_1' && fc.destination === 'acct_eve' && fc.currency === 'usd' && fc.fee === 350, fc);
+  ok('claimed charges are not claimed twice', (await svc('gs_svc_charges_claim', { p_limit: 10 })).length === 0);
+  const gc = claim.find(c => c.pledge !== fayPledge);
+  await svc('gs_svc_charge_done', { p_pledge: gc.pledge, p_result: 'paid', p_pi: 'pi_gil', p_error: null });
+  await svc('gs_svc_charge_done', { p_pledge: fayPledge, p_result: 'failed', p_pi: 'pi_fay1', p_error: 'Your card was declined.' });
+  const fp = (await sql(`select charge_status, fix_by, charge_error from pledges where id = $1`, [fayPledge]))[0];
+  ok('declined charge gives the backer 7 days', fp.charge_status === 'failed' && fp.fix_by && /declined/.test(fp.charge_error));
+  const fn = await good('gs_notifications', { p_token: fay.token });
+  ok('backer told the payment failed', fn.items.some(n => n.kind === 'payment_failed'));
+  ok('paid backer gets a receipt notification', (await good('gs_notifications', { p_token: gil.token })).items.some(n => n.kind === 'charged'));
+  const fix = await svc('gs_svc_checkout_target', { p_uid: fay.me.id, p_intent: null, p_pledge: fayPledge });
+  ok('failed pledge can be fixed', fix && fix.kind === 'fix' && fix.charge_status === 'failed');
+  const upd = await svc('gs_svc_card_update', { p_pledge: fayPledge, p_pm: 'pm_2', p_brand: 'amex', p_last4: '0005' });
+  ok('new card queues the charge again', upd.charge_status === 'due' && upd.card.last4 === '0005');
+  const again = await svc('gs_svc_charges_claim', { p_limit: 10 });
+  ok('retry uses the new card', again.length === 1 && again[0].pm === 'pm_2');
+  await svc('gs_svc_charge_done', { p_pledge: fayPledge, p_result: 'paid', p_pi: 'pi_fay2', p_error: null });
+  await svc('gs_svc_charge_done', { p_pledge: fayPledge, p_result: 'failed', p_pi: 'pi_late', p_error: 'late webhook' });
+  ok('a paid pledge stays paid', (await sql(`select charge_status from pledges where id = $1`, [fayPledge]))[0].charge_status === 'paid');
+  ok('charge found by payment intent', (await svc('gs_svc_charge_by_pi', { p_pi: 'pi_fay2' })) === fayPledge);
+  const d = await good('gs_dashboard', { p_token: eve.token, p_project: sp.id });
+  ok('dashboard totals what was collected', d.payments.paid === 9000 && d.payments.paid_count === 2 && d.payments.fee_bps === 500, d.payments);
+  const mine = await good('gs_mine', { p_token: fay.token });
+  ok('backer sees the charge as paid', mine.backed.find(x => x.id === sp.id).pledge.charge_status === 'paid');
+});
+
+await block('stripe: retries and abandoned charges', async () => {
+  let e = await good('gs_project_new', { p_token: eve.token, p_title: 'Second stripe thing', p_category: 'art' });
+  e = await good('gs_project_save', { p_token: eve.token, p_project: e.id, p_patch: { blurb: 'Another real-money project.', story: STORY, risks: RISKS, goal_cents: 1000 } });
+  e = await good('gs_reward_save', { p_token: eve.token, p_project: e.id, p_reward: { title: 'Thanks', amount: 1000 } });
+  e = await good('gs_project_launch', { p_token: eve.token, p_project: e.id });
+  const i = await good('gs_pledge', { p_token: gil.token, p_project: e.id, p_reward: null, p_amount: 1500 });
+  const p = await svc('gs_svc_intent_complete', { p_intent: i.intent, p_customer: 'cus_gil', p_pm: 'pm_gil', p_brand: 'visa', p_last4: '1111' });
+  await sql(`update projects set deadline = now() - interval '1 minute' where id = $1`, [e.id]);
+  await good('gs_home', {});
+  for (let n = 0; n < 4; n++) { await svc('gs_svc_charges_claim', { p_limit: 5 }); await svc('gs_svc_charge_done', { p_pledge: p.pledge.id, p_result: 'retry', p_pi: null, p_error: 'network' }); }
+  ok('temporary errors are retried', (await sql(`select charge_status from pledges where id = $1`, [p.pledge.id]))[0].charge_status === 'due');
+  await svc('gs_svc_charges_claim', { p_limit: 5 });
+  await svc('gs_svc_charge_done', { p_pledge: p.pledge.id, p_result: 'retry', p_pi: null, p_error: 'network' });
+  ok('after 5 attempts it counts as failed', (await sql(`select charge_status from pledges where id = $1`, [p.pledge.id]))[0].charge_status === 'failed');
+  await sql(`update pledges set fix_by = now() - interval '1 minute' where id = $1`, [p.pledge.id]);
+  const t = await svc('gs_svc_tick', { p_email: true, p_stripe: true });
+  ok('unfixed failures are abandoned after 7 days', t.abandoned === 1 && (await sql(`select charge_status from pledges where id = $1`, [p.pledge.id]))[0].charge_status === 'abandoned');
+  ok('abandoned pledges cannot be fixed', (await svc('gs_svc_checkout_target', { p_uid: gil.me.id, p_intent: null, p_pledge: p.pledge.id })) === null);
+});
+
+await block('surveys', async () => {
+  await bad('no survey before funding', 'gs_survey_send', { p_token: alice.token, p_project: (await sql(`select id from projects where title = 'Alice second'`))[0].id }, /funded/);
+  await bad('only the creator sends surveys', 'gs_survey_send', { p_token: fay.token, p_project: sp.id }, /find/);
+  const s = await good('gs_survey_send', { p_token: eve.token, p_project: sp.id });
+  ok('survey goes only to backers whose reward ships', s.sent === 1);
+  await bad('survey is sent once', 'gs_survey_send', { p_token: eve.token, p_project: sp.id }, /already/);
+  ok('backer is notified', (await good('gs_notifications', { p_token: fay.token })).items.some(n => n.kind === 'survey'));
+  let v = await good('gs_project', { p_token: fay.token, p_slug: sp.slug });
+  ok('project page asks the backer for an address', v.me.needs_address === true && v.project.survey_sent === true);
+  await bad('address needs a name', 'gs_address_save', { p_token: fay.token, p_project: sp.id, p_address: { line1: '1 Main St', city: 'Halifax', country: 'Canada' } }, /name/);
+  const a = await good('gs_address_save', { p_token: fay.token, p_project: sp.id, p_address: { name: 'Fay Backer', line1: '1 Main St', city: 'Halifax', region: 'NS', postal: 'B3H 1A1', country: 'Canada', extra: 'ignored' } });
+  ok('address saved without unknown fields', a.address.city === 'Halifax' && !('extra' in a.address));
+  v = await good('gs_project', { p_token: fay.token, p_slug: sp.slug });
+  ok('backer sees their address, and the prompt is gone', v.me.address.postal === 'B3H 1A1' && v.me.needs_address === false);
+  await bad('no address for rewards that do not ship', 'gs_address_save', { p_token: gil.token, p_project: sp.id, p_address: { name: 'G', line1: 'x', city: 'y', country: 'z' } }, /doesn.t ship/);
+  const d = await good('gs_dashboard', { p_token: eve.token, p_project: sp.id });
+  ok('creator sees the address and survey progress', d.backers.find(b => b.user.username === 'fay').address.line1 === '1 Main St' && d.survey.answered === 1 && d.survey.shipping === 1);
+  const pub = await good('gs_project', { p_token: gil.token, p_slug: sp.slug });
+  ok('other backers never see it', !JSON.stringify(pub).includes('Main St'));
+});
+
+await block('notifications become emails', async () => {
+  const before = (await outbox(fay.me.id, 'notification')).length;
+  ok('earlier notifications were emailed to the confirmed address', before >= 3);
+  const kinds = (await outbox(fay.me.id, 'notification')).map(o => o.data.kind);
+  ok('email carries the kind and project', kinds.includes('payment_failed') && kinds.includes('survey'));
+  await good('gs_profile_save', { p_token: fay.token, p_patch: { email_notify: false } });
+  await good('gs_update_post', { p_token: eve.token, p_project: sp.id, p_title: 'Shipping soon', p_body: 'Boxes are ready.', p_backers_only: false });
+  ok('turning emails off stops them', (await outbox(fay.me.id, 'notification')).length === before);
+  ok('in-app notification still arrives', (await good('gs_notifications', { p_token: fay.token })).items.some(n => n.kind === 'update'));
+  const n0 = (await outbox(eve.me.id, 'notification')).length;
+  ok('no email for creators without a confirmed address', n0 === 0);
+});
+
+await block('worker: emails and secret', async () => {
+  const claim = await svc('gs_svc_emails_claim', { p_limit: 100 });
+  ok('worker claims queued emails', claim.length > 0 && claim.every(e => e.to && e.template));
+  ok('claimed emails are not claimed twice', (await svc('gs_svc_emails_claim', { p_limit: 100 })).length === 0);
+  const v = claim.find(e => e.template === 'verify');
+  await svc('gs_svc_email_done', { p_id: v.id, p_ok: true, p_error: null });
+  const row = (await sql(`select status, data from outbox where id = $1`, [v.id]))[0];
+  ok('sent email is marked and its code is erased', row.status === 'sent' && !('code' in row.data));
+  const other = claim.find(e => e.id !== v.id);
+  await svc('gs_svc_email_done', { p_id: other.id, p_ok: false, p_error: 'boom' });
+  ok('failed email goes back in the queue', (await sql(`select status from outbox where id = $1`, [other.id]))[0].status === 'queued');
+  await sql(`insert into vault.decrypted_secrets values ('gs_worker_secret', 'right-secret') on conflict do nothing`);
+  ok('worker secret checked against Vault', (await svc('gs_svc_worker_ok', { p_secret: 'right-secret' })) === true && (await svc('gs_svc_worker_ok', { p_secret: 'wrong' })) === false);
+  const rm = await good('gs_email_remove', { p_token: gil.token });
+  ok('removing an email clears it', rm.me.email === null);
+});
+
 await pool.end(); await su.end();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
