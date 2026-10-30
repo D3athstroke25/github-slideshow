@@ -50,7 +50,7 @@ async function newPage(w, h, { dark = false } = {}) {
 }
 const nav = async (p, hash) => { await p.evaluate(h => { location.hash = h; }, hash); await p.waitForTimeout(350); };
 const overflow = p => p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: path.join(SHOTS, name + '.png'), fullPage: true }); };
+const shot = async (p, name, fullPage = true) => { if (SHOTS) await p.screenshot({ path: path.join(SHOTS, name + '.png'), fullPage }); };
 const text = (p, sel) => p.locator(sel).first().innerText();
 
 async function signup(p, username, name, password = 'password123') {
@@ -541,6 +541,96 @@ await block('shipping survey', async () => {
   await a.waitForSelector('table');
   ok('creator sees the address in the backer list', /12 Harbour Rd/.test(await a.innerText('table')));
   ok('creator flow had no console errors', a.errs.length === 0, a.errs.join(' | '));
+  await a.context().close();
+});
+
+await block('safety: word filter, reporting, blocking, moderation', async () => {
+  const b = await newPage(390, 844);
+  await login(b, 'sam');
+  await nav(b, `#/p/${slug}/comments`);
+  await b.waitForSelector('form[data-form=comment] textarea');
+  await b.fill('form[data-form=comment] textarea', 'What a load of SHIT');
+  await b.click('form[data-form=comment] button[type=submit]');
+  await b.waitForSelector('form[data-form=comment] .err');
+  ok('a comment with a blocked word is refused', /keep it friendly/.test(await text(b, 'form[data-form=comment] .err')));
+  await b.fill('form[data-form=comment] textarea', 'Any news on shipping dates?');
+  await b.click('form[data-form=comment] button[type=submit]');
+  await b.waitForSelector('.comment .text >> text=Any news on shipping dates?');
+  ok('own comments have no Report or Block', await b.locator('.comment:has-text("Any news on shipping") >> [data-act=report-comment]').count() === 0);
+
+  const t = await newPage(390, 844);
+  await login(t, 'tess');
+  await nav(t, `#/p/${slug}/comments`);
+  const samComment = t.locator('.comment', { hasText: 'Any news on shipping dates?' }).first();
+  await samComment.waitFor();
+  await samComment.locator('[data-act=report-comment]').click();
+  await t.waitForSelector('form[data-form=report-comment]');
+  await t.waitForTimeout(400); await shot(t, 'report-comment-phone', false);
+  await t.check('form[data-form=report-comment] input[value="Harassment, bullying or hate"]');
+  await t.fill('form[data-form=report-comment] textarea[name=details]', 'Keeps posting this');
+  await t.click('form[data-form=report-comment] button[type=submit]');
+  await t.waitForSelector('.toast >> text=moderators');
+  const rep = await sql(`select r.reason, c.body from reports r join comments c on c.id = r.comment_id order by r.id desc limit 1`);
+  ok('comment report saved with its reason', rep[0] && rep[0].reason === 'Harassment, bullying or hate: Keeps posting this' && rep[0].body === 'Any news on shipping dates?', JSON.stringify(rep));
+
+  await samComment.locator('[data-act=block]').click();
+  await t.click('.modal [data-yes]');
+  await t.waitForFunction(() => !document.querySelector('#thread').innerText.includes('Any news on shipping'));
+  ok('blocking hides their comments at once', !/Can't wait for mine/.test(await t.innerText('#thread')) && (await sql(`select count(*)::int n from blocks`))[0].n === 1);
+  await nav(t, '#/settings');
+  await t.waitForSelector('#blocked [data-act=unblock]');
+  ok('Settings lists blocked accounts', /Sam Lee/.test(await t.innerText('#blocked')));
+  await shot(t, 'settings-blocked-phone');
+  await t.click('#blocked [data-act=unblock]');
+  await t.waitForSelector('#blocked >> text=haven’t blocked anyone');
+  ok('unblock from Settings', (await sql(`select count(*)::int n from blocks`))[0].n === 0);
+  await nav(t, '#/u/sam');
+  await t.click('.prof [data-act=block]');
+  await t.click('.modal [data-yes]');
+  await t.waitForSelector('.prof [data-act=unblock]');
+  ok('block and unblock from a profile', /You blocked Sam Lee/.test(await t.innerText('main')));
+  await t.click('.prof [data-act=unblock]');
+  await t.waitForSelector('.prof [data-act=block]');
+  ok('help page linked in the footer', await t.locator('#foot a[href="support.html"]').count() === 1);
+  ok('safety flow had no console errors', t.errs.length === 0, t.errs.join(' | '));
+  await t.context().close();
+
+  const a = await newPage(1280, 900);
+  await login(a, 'maya');
+  await nav(a, '#/activity');
+  await a.waitForSelector('main >> text=New report');
+  ok('moderators are notified of the report', /New report on a comment/.test(await a.innerText('main')));
+  await nav(a, '#/admin');
+  await a.waitForSelector('[data-act=adm-del-comment]');
+  ok('Moderation shows the reported comment and reason', /Any news on shipping dates/.test(await a.innerText('main')) && /Keeps posting this/.test(await a.innerText('main')));
+  await shot(a, 'admin-reports-desktop');
+  await a.click('[data-act=adm-suspend][data-username=sam]');
+  await a.click('.modal [data-yes]');
+  await a.waitForSelector('main >> text=Suspended accounts');
+  ok('suspend the author', (await sql(`select suspended_at from users where username = 'sam'`))[0].suspended_at !== null);
+  await a.click('[data-act=adm-del-comment]');
+  await a.click('.modal [data-yes]');
+  await a.waitForSelector('main >> text=(removed)');
+  ok('remove the comment, resolving the report', (await sql(`select c.deleted, r.resolved from reports r join comments c on c.id = r.comment_id order by r.id desc limit 1`))[0].resolved === true);
+
+  await nav(b, '#/settings'); await b.waitForTimeout(400);
+  ok('a suspended person is signed out', !(await b.evaluate(() => window.__gs.S.token)));
+  await nav(b, '#/login');
+  await b.fill('form[data-form=login] input[name=username]', 'sam');
+  await b.fill('form[data-form=login] input[name=password]', 'password123');
+  await b.click('form[data-form=login] button[type=submit]');
+  await b.waitForSelector('form[data-form=login] .err');
+  ok('and cannot log in', /suspended/.test(await text(b, 'form[data-form=login] .err')));
+  await b.context().close();
+
+  await a.click('[data-act=adm-suspend][data-on=false]');
+  await a.waitForFunction(() => !document.body.innerText.includes('Suspended accounts'));
+  ok('lift the suspension', (await sql(`select suspended_at from users where username = 'sam'`))[0].suspended_at === null);
+  await a.fill('form[data-form=adm-words] textarea', 'shit\nfrobnicate');
+  await a.click('form[data-form=adm-words] button[type=submit]');
+  await a.waitForSelector('.toast >> text=Word list saved');
+  ok('moderators edit the word list', JSON.stringify((await sql(`select value from settings where key = 'blocked_words'`))[0].value) === '["frobnicate","shit"]');
+  ok('moderation had no console errors', a.errs.length === 0, a.errs.join(' | '));
   await a.context().close();
 });
 

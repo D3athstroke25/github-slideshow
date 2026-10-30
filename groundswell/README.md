@@ -43,7 +43,12 @@ It runs in the browser on phones, tablets and computers, can be added to the Hom
 - Accounts with a username and password, plus a recovery code shown at sign-up. With an email added and confirmed, a password can also be reset by email.
 - Public profiles. The projects you back stay private unless you opt in.
 - Light and dark mode. Offline shell. Installable on the Home Screen. Link previews when shared.
-- Report a project. Moderators can feature or hide projects, resolve reports, switch payments between test and real, set the platform fee, and remove the sample projects.
+- Safety, as App Store guideline 1.2 asks:
+  - Report a project or a comment.
+  - Block someone from their comment or profile: you stop seeing their comments, they can't comment on your projects, and they can't notify you. Unblock in Settings.
+  - Words on a moderator-edited list are filtered out of comments, updates, profiles and launched projects.
+  - A Help & contact page (`support.html`), linked from the footer, the account menu and Settings.
+- Moderators are notified of every report and can remove comments, suspend accounts, hide or feature projects, edit the word list, switch payments between test and real, set the platform fee, and remove the sample projects.
 
 ## Test mode and real payments
 
@@ -79,7 +84,7 @@ Update the Terms and Privacy policy with your business details, fees and refund 
 
 ## Going live (one-time)
 
-1. In the Supabase SQL Editor, run any migrations not yet applied, in order. `004` adds email, payments and surveys, and `005` schedules the worker.
+1. In the Supabase SQL Editor, run any migrations not yet applied, in order. `004` adds email, payments and surveys, `005` schedules the worker, and `006` adds reporting comments, blocking, the word filter and suspensions.
    - Deploy the function with JWT verification off: `supabase functions deploy gs --no-verify-jwt`.
 2. Merge into `main`. The **Deploy Kinboard and Groundswell to GitHub Pages** workflow publishes:
    - Kinboard: https://d3athstroke25.github.io/github-slideshow/
@@ -131,7 +136,7 @@ The app already has:
 - **Stripe pages that open in an in-app browser.** When Stripe finishes, the `groundswell://` link brings people back into the app.
 - **The native iOS share sheet.**
 
-For TestFlight and the App Store, follow the same steps as Kinboard's README. In App Store Connect's privacy section, declare the data types above as "Linked to you" and "App functionality". Physical rewards and pledges are allowed outside Apple's in-app purchase.
+For TestFlight and the App Store, [`native/APP_STORE.md`](native/APP_STORE.md) has every App Store Connect field: listing text, privacy answers, age rating, the reviewer's demo account and review notes. Physical rewards and pledges are allowed outside Apple's in-app purchase (guideline 3.1.3(e)).
 
 ## How the backend works
 
@@ -147,6 +152,7 @@ Everything the app does runs through `SECURITY DEFINER` database functions named
 - **Email:** every notification for someone with a confirmed email (and email turned on) is queued in `outbox`. Codes are erased from the queue once sent.
 - **Images:** the app asks `gs_upload_ticket()` for a one-time path, then uploads to the public `media` Storage bucket. The bucket's insert policy only accepts a path ticketed in the last 30 minutes. Uploads are limited to 5 MB and JPEG, PNG or WebP.
 - **Shipping addresses** are visible only to the backer and the project's creator.
+- **Safety:** triggers check text against the `blocked_words` setting as it's saved (drafts are checked when they launch), hide notifications from people you've blocked, and tell moderators about each report. A suspended account's sessions stop working at once.
 
 The free Supabase plan pauses projects after about a week with no activity. If that happens, restore it from the Supabase dashboard.
 
@@ -164,13 +170,14 @@ All three suites run against a local Postgres 16+ loaded from the same migration
 cd groundswell/test
 npm install
 # Postgres on 127.0.0.1:54329 with a trust-auth "postgres" superuser (set GS_PG_PORT to change the port)
-npm run test:api        # 241 checks: every database function, permissions, throttling, settlement, storage policy,
-                        # email codes, payment intents, charging and retries, surveys
-npm run test:functions  # 61 checks: the Edge Function with fake Stripe and Resend: Connect onboarding, Checkout,
+npm run test:api        # 289 checks: every database function, permissions, throttling, settlement, storage policy,
+                        # email codes, payment intents, charging and retries, surveys, word filter, reports,
+                        # blocking and suspensions
+npm run test:functions  # 62 checks: the Edge Function with fake Stripe and Resend: Connect onboarding, Checkout,
                         # webhook signatures, charges and declines, emails and templates
-npm run test:e2e        # 94 checks in headless Chromium: the whole app, including real-payment pledges through a
-                        # fake Checkout, a declined card and its fix, the shipping survey, email, and layout at
-                        # phone/tablet/desktop in light and dark mode
+npm run test:e2e        # 112 checks in headless Chromium: the whole app, including real-payment pledges through a
+                        # fake Checkout, a declined card and its fix, the shipping survey, email, reporting and
+                        # blocking, moderation, and layout at phone/tablet/desktop in light and dark mode
 ```
 
 The Edge Function is TypeScript; Node 22 runs it directly in the tests. The browser tests need Playwright with Chromium (`npx playwright install chromium`). `npm run serve` starts the app at http://127.0.0.1:8098 against the local database.

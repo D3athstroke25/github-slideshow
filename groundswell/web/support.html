@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Groundswell Help</title>
+<style>body{font:16px/1.6 -apple-system,"Segoe UI",Roboto,sans-serif;max-width:700px;margin:0 auto;padding:32px 16px;color:#15181C;background:#FAF8F4}h1,h2{line-height:1.2}h3{margin-bottom:4px}a{color:#A9330F}.contact{background:#fff;border:1px solid #E5E1D9;border-radius:14px;padding:4px 20px 12px}@media (prefers-color-scheme:dark){body{color:#EEF0F2;background:#111316}a{color:#F47E5D}.contact{background:#1A1D21;border-color:#2C3036}}</style></head>
+<body>
+<p><a href="./">&larr; Back to Groundswell</a></p>
+<h1>Help &amp; contact</h1>
+
+<div class="contact">
+<h2>Contact us</h2>
+<p id="contact">For anything this page doesn't answer, including safety concerns and questions about a pledge, <a href="https://github.com/D3athstroke25/github-slideshow/issues/new">send us a message</a>. Please don't include passwords or card details.</p>
+<p>We aim to reply within two business days, and to review reports of abusive content within 24 hours.</p>
+</div>
+
+<h2>Backing projects</h2>
+<h3>When am I charged?</h3>
+<p>Only if the project reaches its goal by its deadline. If it falls short, nothing is collected. On projects that take real payments you save a card at Stripe when you pledge, and it's charged when the project ends funded.</p>
+<h3>Can I change or cancel my pledge?</h3>
+<p>Yes, until the deadline. Open the project and tap <b>Manage your pledge</b>.</p>
+<h3>My card was declined</h3>
+<p>You'll get a notification and an email. Open the project and update your card within 7 days to keep your pledge and reward.</p>
+<h3>Where's my reward?</h3>
+<p>Creators deliver rewards and post progress in their updates. When a funded project is ready to ship, you'll be asked for your shipping address on the project page. Groundswell isn't a store and doesn't guarantee delivery; ask the creator in the project's comments first.</p>
+
+<h2>Safety</h2>
+<h3>Report a project or comment</h3>
+<p>Use <b>Report this project</b> at the bottom of a project page, or <b>Report</b> under a comment. Reports are private. Moderators review every one and can remove comments, hide projects and suspend accounts.</p>
+<h3>Block someone</h3>
+<p>Tap <b>Block</b> on their comment or profile. You won't see their comments, they can't comment on your projects, and they can't send you notifications. Unblock them any time in <b>Settings → Blocked accounts</b>.</p>
+<h3>What isn't allowed</h3>
+<p>Harassment, hate, threats, sexual content, spam and anything else the <a href="terms.html">Terms of Use</a> rule out. Words that aren't allowed are filtered automatically. There is no tolerance for objectionable content or abusive users.</p>
+
+<h2>Your account</h2>
+<h3>I forgot my password</h3>
+<p>On the log-in page tap <b>Forgot password?</b>. Use a code we email you (if you've confirmed an email address) or the recovery code you saved when you signed up.</p>
+<h3>Delete my account</h3>
+<p>Go to <b>Settings → Delete account</b> and enter your password. Your live projects are canceled (backers are told and not charged), your active pledges are canceled, and your profile is erased.</p>
+<h3>Creators: getting paid</h3>
+<p>Connect Stripe in <b>Settings → Payouts</b>. Stripe checks your identity and pays out what you raise to your bank, minus the platform fee shown there.</p>
+
+<p style="margin-top:32px"><a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a></p>
+<script src="config.js"></script>
+<script>
+  // A support email, when one is set in config.js, replaces the message link.
+  var email = (window.GS_CONFIG || {}).supportEmail;
+  if (email) {
+    var a = document.createElement('a'); a.href = 'mailto:' + email; a.textContent = email;
+    var p = document.getElementById('contact');
+    p.textContent = "For anything this page doesn't answer, including safety concerns and questions about a pledge, email ";
+    p.append(a, ". Please don't include passwords or card details.");
+  }
+</script>
+</body></html>
