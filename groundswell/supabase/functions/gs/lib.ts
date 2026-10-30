@@ -166,6 +166,7 @@ export function renderEmail(template: string, data: any): Email {
       case 'survey': subject = `Where should we send your reward from ${title}?`; lines = [`${title} is getting ready to ship. Please enter your shipping address so your reward reaches you.`]; cta = ['Enter your address', project]; break;
       case 'payment_failed': subject = `Action needed: your pledge to ${title}`; lines = [`We couldn’t charge your card for your ${money(x.amount || 0, p.currency || 'USD')} pledge${x.error ? ` (${x.error})` : ''}.`, 'Please update your card within 7 days to keep your pledge and reward.']; cta = ['Update your card', project]; break;
       case 'charged': subject = `Receipt: your pledge to ${title}`; lines = [`Your card was charged ${money(x.amount || 0, p.currency || 'USD')} for your pledge to ${title}. Thank you!`]; cta = ['See the project', project]; break;
+      case 'report': subject = `New report: ${x.comment ? 'a comment on ' : ''}${title}`; lines = [`Someone reported ${x.comment ? 'a comment on ' : ''}${title}: “${x.reason || ''}”`, 'Please review it in Moderation.']; cta = ['Open Moderation', link('/admin')]; break;
       default: subject = `News from ${title}`; lines = ['There’s news on a project you follow.']; cta = ['See the project', project];
     }
   }

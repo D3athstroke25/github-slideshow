@@ -643,6 +643,123 @@ await block('worker: emails and secret', async () => {
   ok('removing an email clears it', rm.me.email === null);
 });
 
+let hana, ivan, jo, hp;
+
+await block('app review: word filter', async () => {
+  await sql(`update settings set value = '"test"' where key = 'payments'`);
+  hana = await good('gs_signup', { p_username: 'hana', p_password: 'hanapassword', p_name: 'Hana' });
+  ivan = await good('gs_signup', { p_username: 'ivan', p_password: 'ivanpassword', p_name: 'Ivan' });
+  jo = await good('gs_signup', { p_username: 'joan', p_password: 'joanpassword', p_name: 'Joan' });
+  hp = await launchedProject(hana.token, { title: 'Hana lamp' });
+  await good('gs_pledge', { p_token: ivan.token, p_project: hp.id, p_reward: null, p_amount: 700 });
+  await good('gs_pledge', { p_token: jo.token, p_project: hp.id, p_reward: null, p_amount: 700 });
+  const post = (token, body, extra = {}) => call('gs_comment_post', { p_token: token, p_project: hp.id, p_body: body, ...extra });
+
+  await bad('comment with a blocked word refused', 'gs_comment_post', { p_token: ivan.token, p_project: hp.id, p_body: 'This is SHIT.' }, /keep it friendly: your comment/);
+  await bad('word endings are caught', 'gs_comment_post', { p_token: ivan.token, p_project: hp.id, p_body: 'fucking great' }, /friendly/);
+  ok('innocent words that contain blocked ones pass', (await post(ivan.token, 'Shipping to Scunthorpe with spicy shiitake and a cocktail?')).status === 200);
+  await bad('updates are checked', 'gs_update_post', { p_token: hana.token, p_project: hp.id, p_title: 'News', p_body: 'What a shitty week.', p_backers_only: false }, /your update/);
+  await bad('profiles are checked', 'gs_profile_save', { p_token: ivan.token, p_patch: { bio: 'Part-time twat.' } }, /your profile/);
+  await bad('usernames are checked', 'gs_signup', { p_username: 'shit', p_password: 'password1', p_name: 'X' }, /friendly/);
+
+  const d = await good('gs_project_new', { p_token: hana.token, p_title: 'Calm planner', p_category: 'design' });
+  ok('drafts save as you type', (await call('gs_project_save', { p_token: hana.token, p_project: d.id, p_patch: { blurb: 'A bullshit-free planner for busy people.', story: STORY, risks: RISKS, goal_cents: 50000, duration_days: 20 } })).status === 200);
+  await good('gs_reward_save', { p_token: hana.token, p_project: d.id, p_reward: { title: 'Planner', amount: 2000 } });
+  await bad('launch checks the project text', 'gs_project_launch', { p_token: hana.token, p_project: d.id }, /your project/);
+  await good('gs_project_save', { p_token: hana.token, p_project: d.id, p_patch: { blurb: 'A calm planner for busy people.' } });
+  await good('gs_reward_save', { p_token: hana.token, p_project: d.id, p_reward: { title: 'Bitch-proof binder', amount: 3000 } });
+  await bad('launch checks rewards too', 'gs_project_launch', { p_token: hana.token, p_project: d.id }, /your project/);
+  await sql(`delete from rewards where project_id = $1 and title like 'Bitch%'`, [d.id]);
+  ok('clean project launches', (await call('gs_project_launch', { p_token: hana.token, p_project: d.id })).status === 200);
+  await bad('live projects are checked on edit', 'gs_reward_save', { p_token: hana.token, p_project: d.id, p_reward: { title: 'Wanker edition', amount: 4000 } }, /your reward/);
+
+  const before = (await good('gs_admin', { p_token: eve.token })).settings.blocked_words;
+  await bad('only moderators edit the list', 'gs_admin_words', { p_token: ivan.token, p_words: 'x' }, /Admins/);
+  const w = await good('gs_admin_words', { p_token: eve.token, p_words: 'Shit, darn\nheck ,  , darn' });
+  ok('moderators set the word list (trimmed, lowercased, no repeats)', JSON.stringify(w.settings.blocked_words) === '["darn","heck","shit"]', w.settings.blocked_words);
+  ok('new words apply at once', (await post(ivan.token, 'Oh darn, it sold out.')).status !== 200);
+  ok('words taken off the list are allowed', (await post(ivan.token, 'A bitch of a deadline.')).status === 200);
+  await good('gs_admin_words', { p_token: eve.token, p_words: before.join('\n') });
+  ok('helpers are not callable by visitors', (await call('gs_check_words', { p_text: 'x', p_what: 'y' })).status !== 200);
+});
+
+await block('app review: reporting comments', async () => {
+  const c = await good('gs_comment_post', { p_token: ivan.token, p_project: hp.id, p_body: 'Is this real?' });
+  await bad('cannot report your own comment', 'gs_comment_report', { p_token: ivan.token, p_comment: c.id, p_reason: 'Spam' }, /delete your own/);
+  await bad('needs a reason', 'gs_comment_report', { p_token: jo.token, p_comment: c.id, p_reason: ' ' }, /what/);
+  await bad('needs to be logged in', 'gs_comment_report', { p_token: null, p_comment: c.id, p_reason: 'Spam' }, /log in/);
+  const eveN0 = (await good('gs_notifications', { p_token: eve.token })).items.filter(n => n.kind === 'report').length;
+  await good('gs_comment_report', { p_token: jo.token, p_comment: c.id, p_reason: 'Spam' });
+  await good('gs_comment_report', { p_token: jo.token, p_comment: c.id, p_reason: 'Spam again' });
+  ok('a repeat report is ignored', (await sql(`select count(*)::int n from reports where comment_id = $1`, [c.id]))[0].n === 1);
+  const adm = await good('gs_admin', { p_token: eve.token });
+  const r = adm.reports.find(x => x.comment && x.comment.id === c.id);
+  ok('moderators see the comment, its author and the project', r && r.comment.body === 'Is this real?' && r.comment.author.username === 'ivan' && r.project.slug === hp.slug && r.by.username === 'joan', r);
+  const eveN = (await good('gs_notifications', { p_token: eve.token })).items.filter(n => n.kind === 'report');
+  ok('moderators are notified of every report', eveN.length === eveN0 + 1 && eveN[0].data.comment === true && eveN[0].data.reason === 'Spam');
+  ok('the reported person is not told', !(await good('gs_notifications', { p_token: ivan.token })).items.some(n => n.kind === 'report'));
+  await good('gs_comment_delete', { p_token: eve.token, p_comment: c.id });
+  const after = (await good('gs_admin', { p_token: eve.token })).reports.find(x => x.comment && x.comment.id === c.id);
+  ok('moderators can remove a reported comment', after.comment.deleted === true);
+  await bad('removed comments cannot be reported', 'gs_comment_report', { p_token: hana.token, p_comment: c.id, p_reason: 'Spam' }, /deleted/);
+  await good('gs_report', { p_token: jo.token, p_project: hp.id, p_reason: 'This looks fake to me' });
+  ok('project reports notify moderators too', (await good('gs_notifications', { p_token: eve.token })).items.some(n => n.kind === 'report' && n.data.comment === false));
+});
+
+await block('app review: blocking', async () => {
+  await bad('cannot block yourself', 'gs_block', { p_token: ivan.token, p_username: 'ivan', p_on: true }, /yourself/);
+  await bad('unknown person', 'gs_block', { p_token: ivan.token, p_username: 'nobody_here', p_on: true }, /find/);
+  await bad('blocking needs login', 'gs_block', { p_token: null, p_username: 'joan', p_on: true }, /log in/);
+  const jc = await good('gs_comment_post', { p_token: jo.token, p_project: hp.id, p_body: 'First!' });
+  await good('gs_comment_post', { p_token: ivan.token, p_project: hp.id, p_parent: jc.id, p_body: 'Welcome' });
+  await good('gs_block', { p_token: ivan.token, p_username: 'Joan', p_on: true });
+  await good('gs_block', { p_token: ivan.token, p_username: 'joan', p_on: true });
+  const t = await good('gs_comments', { p_token: ivan.token, p_project: hp.id });
+  const hidden = t.items.find(x => x.id === jc.id);
+  ok('comments from blocked people are hidden', hidden.blocked === true && hidden.body === '' && hidden.author === null && hidden.badge === null);
+  ok('replies from others stay', t.items.some(x => x.parent === jc.id && x.author && x.author.username === 'ivan'));
+  ok('everyone else still sees them', (await good('gs_comments', { p_token: hana.token, p_project: hp.id })).items.find(x => x.id === jc.id).body === 'First!');
+  ok('the profile shows the block', (await good('gs_user', { p_token: ivan.token, p_username: 'joan' })).user.blocked === true
+    && (await good('gs_user', { p_token: null, p_username: 'joan' })).user.blocked === false);
+  const bl = await good('gs_blocks', { p_token: ivan.token });
+  ok('blocked list (blocking twice is fine)', bl.length === 1 && bl[0].username === 'joan' && bl[0].at);
+
+  const ic = await good('gs_comment_post', { p_token: ivan.token, p_project: hp.id, p_body: 'Ivan here' });
+  const n0 = (await good('gs_notifications', { p_token: ivan.token })).items.length;
+  await good('gs_comment_post', { p_token: jo.token, p_project: hp.id, p_parent: ic.id, p_body: 'hey ivan' });
+  ok('blocked people cannot notify you', (await good('gs_notifications', { p_token: ivan.token })).items.length === n0);
+
+  await good('gs_block', { p_token: hana.token, p_username: 'joan', p_on: true });
+  await bad('blocked people cannot comment on your projects', 'gs_comment_post', { p_token: jo.token, p_project: hp.id, p_body: 'again' }, /can't comment/);
+  await good('gs_block', { p_token: hana.token, p_username: 'joan', p_on: false });
+  ok('unblocking lets them comment again', (await call('gs_comment_post', { p_token: jo.token, p_project: hp.id, p_body: 'back again' })).status === 200);
+  await good('gs_block', { p_token: ivan.token, p_username: 'joan', p_on: false });
+  ok('unblocked comments show again', (await good('gs_comments', { p_token: ivan.token, p_project: hp.id })).items.find(x => x.id === jc.id).body === 'First!'
+    && (await good('gs_blocks', { p_token: ivan.token })).length === 0);
+
+  const k = await good('gs_signup', { p_username: 'kim', p_password: 'kimpassword', p_name: 'Kim' });
+  await good('gs_block', { p_token: k.token, p_username: 'ivan', p_on: true });
+  await good('gs_block', { p_token: ivan.token, p_username: 'kim', p_on: true });
+  await good('gs_account_delete', { p_token: k.token, p_password: 'kimpassword' });
+  ok('blocks go with a deleted account', (await sql(`select count(*)::int n from blocks where user_id = $1 or blocked_id = $1`, [k.me.id]))[0].n === 0);
+  ok('visitors cannot read the blocks table', (await sql(`select has_table_privilege('anon', 'public.blocks', 'select') a`))[0].a === false);
+});
+
+await block('app review: suspending accounts', async () => {
+  await bad('only moderators', 'gs_admin_suspend', { p_token: ivan.token, p_username: 'joan', p_on: true }, /Admins/);
+  await bad('moderators cannot be suspended', 'gs_admin_suspend', { p_token: eve.token, p_username: 'alice', p_on: true }, /can't be suspended/);
+  const jl = await good('gs_login', { p_username: 'joan', p_password: 'joanpassword' });
+  const a = await good('gs_admin_suspend', { p_token: eve.token, p_username: 'joan', p_on: true });
+  ok('suspended accounts are listed', a.suspended.some(u => u.username === 'joan' && u.at));
+  ok('suspension signs them out everywhere', (await call('gs_me', { p_token: jl.token })).status !== 200 && (await call('gs_me', { p_token: jo.token })).status !== 200);
+  ok('and stops them logging in', /suspended/.test((await good('gs_login', { p_username: 'joan', p_password: 'joanpassword' })).error || ''));
+  ok('a wrong password still just says wrong password', /Wrong/.test((await good('gs_login', { p_username: 'joan', p_password: 'nope' })).error || ''));
+  const rep = (await good('gs_admin', { p_token: eve.token })).reports.find(x => x.comment && x.comment.author.username === 'ivan');
+  ok('reports show whether the author is suspended', rep && rep.comment.author_suspended === false);
+  await good('gs_admin_suspend', { p_token: eve.token, p_username: 'joan', p_on: false });
+  ok('lifting a suspension lets them log in again', !!(await good('gs_login', { p_username: 'joan', p_password: 'joanpassword' })).token);
+});
+
 await pool.end(); await su.end();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

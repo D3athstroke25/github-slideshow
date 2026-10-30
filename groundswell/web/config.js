@@ -6,4 +6,6 @@ window.GS_CONFIG = {
   appUrl: 'https://d3athstroke25.github.io/github-slideshow/groundswell/',
   // 'test': pledges are recorded and count toward goals, but no card is taken and no money moves.
   payments: 'test',
+  // Shown on the Help & contact page when set, e.g. 'help@yourdomain.com'.
+  supportEmail: '',
 };

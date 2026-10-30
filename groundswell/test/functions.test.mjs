@@ -198,11 +198,13 @@ await block('emails', async () => {
 });
 
 await block('email templates', async () => {
-  for (const kind of ['update', 'funded', 'ended', 'canceled', 'reply', 'comment', 'first_backer', 'milestone', 'ending_soon', 'survey', 'payment_failed', 'charged', 'whatever']) {
-    const m = lib.renderEmail('notification', { kind, name: 'Sam', actor: '<img src=x>', data: { n: 2, title: 'T', pct: 50, amount: 1234, excerpt: '<script>', result: 'successful', role: 'backer', payments: 'stripe' }, project: { title: 'P & Q', slug: 'p-q', currency: 'USD', pledged: 5000 } });
+  for (const kind of ['update', 'funded', 'ended', 'canceled', 'reply', 'comment', 'first_backer', 'milestone', 'ending_soon', 'survey', 'payment_failed', 'charged', 'report', 'whatever']) {
+    const m = lib.renderEmail('notification', { kind, name: 'Sam', actor: '<img src=x>', data: { n: 2, title: 'T', pct: 50, amount: 1234, excerpt: '<script>', reason: '<script>', comment: true, result: 'successful', role: 'backer', payments: 'stripe' }, project: { title: 'P & Q', slug: 'p-q', currency: 'USD', pledged: 5000 } });
     if (!m.subject || m.html.includes('<script>') || m.html.includes('<img src=x>')) { ok(`template ${kind}`, false, m.subject); }
   }
   ok('every notification kind renders safely', true);
+  const r = lib.renderEmail('notification', { kind: 'report', name: 'Mod', data: { comment: true, reason: 'Spam' }, project: { title: 'Lamp', slug: 'lamp' } });
+  ok('report email points moderators to Moderation', /a comment on Lamp/.test(r.subject) && r.text.includes('#/admin'), r.subject);
   const f = lib.form({ a: 1, b: { c: 'x y', d: [1, { e: 2 }] }, z: null });
   ok('Stripe form encoding', f === 'a=1&b%5Bc%5D=x%20y&b%5Bd%5D%5B0%5D=1&b%5Bd%5D%5B1%5D%5Be%5D=2', f);
 });

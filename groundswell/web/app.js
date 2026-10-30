@@ -411,7 +411,7 @@ function renderChrome() {
     <a href="#/activity" ${cur('activity')}>${icon('bell')}Activity${S.unread ? `<span class="dot-badge">${S.unread > 9 ? '9+' : S.unread}</span>` : ''}</a>
     <a href="#/me" ${cur('me', 'settings', 'u', 'login', 'signup')}>${u ? avatar(u, 22) : icon('user')}${u ? 'You' : 'Log in'}</a>`);
   set('#foot', `<div class="wrap"><div class="row"><span class="logo" style="font-size:17px">${LOGO}groundswell</span>${testSite() ? `<span class="testmode">${icon('info', 'sm')} Test mode: no real money moves</span>` : ''}</div>
-    <nav aria-label="Footer"><a href="#/how">How it works</a><a href="#/explore">Discover</a><a href="#/start">Start a project</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav></div>`);
+    <nav aria-label="Footer"><a href="#/how">How it works</a><a href="#/explore">Discover</a><a href="#/start">Start a project</a><a href="support.html">Help & contact</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav></div>`);
 }
 function openMenu(btn) {
   const wrap = btn.parentNode; const old = $('.menu-pop', wrap);
@@ -423,6 +423,7 @@ function openMenu(btn) {
     <a href="#/me/created" role="menuitem">${icon('rocket')}My projects</a>
     <a href="#/settings" role="menuitem">${icon('settings')}Settings</a>
     ${u.admin ? `<a href="#/admin" role="menuitem">${icon('flag')}Moderation</a>` : ''}
+    <a href="support.html" role="menuitem">${icon('info')}Help & contact</a>
     <hr><button data-act="logout" role="menuitem">${icon('logout')}Log out</button>`;
   wrap.append(pop); btn.setAttribute('aria-expanded', 'true');
   setTimeout(() => document.addEventListener('click', function off(e) { if (!pop.contains(e.target) || e.target.closest('a,button')) { pop.remove(); btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', off); } }), 0);
@@ -700,14 +701,16 @@ async function loadThread(d, updateId) {
   let t;
   try { t = await rpc('gs_comments', { project: d.project.id, update: updateId }); } catch (e) { el.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
   if (!document.body.contains(el)) return;
-  const kids = {}; for (const c of t.items) if (c.parent) (kids[c.parent] = kids[c.parent] || []).push(c);
-  const one = c => `<div class="comment" id="c-${c.id}">${c.deleted ? '<span class="avatar" style="width:40px;height:40px"></span>' : avatar(c.author, 40)}<div class="body">
-      <div class="who">${c.deleted ? '<span class="muted">Comment removed</span>' : `${c.author.username ? `<a href="#/u/${esc(c.author.username)}">${esc(c.author.name)}</a>` : `<b>${esc(c.author.name)}</b>`}${c.badge === 'creator' ? ' <span class="tag accent">Creator</span>' : c.badge === 'backer' ? ' <span class="tag">Backer</span>' : ''}`}<span class="muted small">${ago(c.created_at)}</span></div>
-      ${c.deleted ? '' : `<div class="text">${esc(c.body)}</div>`}
-      <div class="tools">${t.can_comment && !c.deleted && !c.parent ? `<button data-act="reply" data-id="${c.id}">Reply</button>` : ''}${c.can_delete ? `<button data-act="del-comment" data-id="${c.id}">Delete</button>` : ''}</div>
+  // Replies from people you blocked are left out; their top-level comments stay as a placeholder if others replied.
+  const kids = {}; for (const c of t.items) if (c.parent && !c.blocked) (kids[c.parent] = kids[c.parent] || []).push(c);
+  const gone = c => c.deleted || c.blocked;
+  const one = c => `<div class="comment" id="c-${c.id}">${gone(c) ? '<span class="avatar" style="width:40px;height:40px"></span>' : avatar(c.author, 40)}<div class="body">
+      <div class="who">${gone(c) ? `<span class="muted">${c.deleted ? 'Comment removed' : 'Hidden because you blocked this person'}</span>` : `${c.author.username ? `<a href="#/u/${esc(c.author.username)}">${esc(c.author.name)}</a>` : `<b>${esc(c.author.name)}</b>`}${c.badge === 'creator' ? ' <span class="tag accent">Creator</span>' : c.badge === 'backer' ? ' <span class="tag">Backer</span>' : ''}`}<span class="muted small">${ago(c.created_at)}</span></div>
+      ${gone(c) ? '' : `<div class="text">${esc(c.body)}</div>`}
+      <div class="tools">${t.can_comment && !gone(c) && !c.parent ? `<button data-act="reply" data-id="${c.id}">Reply</button>` : ''}${c.can_delete ? `<button data-act="del-comment" data-id="${c.id}">Delete</button>` : ''}${S.me && !c.mine && !gone(c) ? `<button data-act="report-comment" data-id="${c.id}">Report</button>${c.author.username ? `<button data-act="block" data-username="${esc(c.author.username)}" data-name="${esc(c.author.name)}">Block</button>` : ''}` : ''}</div>
       ${!c.parent && (kids[c.id] || []).length ? `<div class="replies">${kids[c.id].map(one).join('')}</div>` : ''}
       <div class="reply-slot"></div></div></div>`;
-  const tops = t.items.filter(c => !c.parent && !(c.deleted && !(kids[c.id] || []).length)).reverse();
+  const tops = t.items.filter(c => !c.parent && !(gone(c) && !(kids[c.id] || []).length)).reverse();
   let composer;
   if (t.locked) composer = lockedUpdate(d);
   else if (t.can_comment) composer = `<form class="composer" data-form="comment" data-project="${d.project.id}" data-update="${updateId || ''}"><label class="sr" for="cbody">Comment</label><textarea id="cbody" class="textarea" name="body" maxlength="2000" placeholder="Say something nice, ask a question…" required></textarea><div><button class="btn primary" type="submit">Post comment</button></div></form>`;
@@ -1209,7 +1212,9 @@ async function pageUser(ctx) {
   const u = d.user, list = tab === 'backed' ? d.backed : d.created;
   setMain(`<div class="wrap page">
     <div class="prof">${avatar(u, 96)}<div style="flex:1;min-width:220px"><h1>${esc(u.name)}</h1><p class="muted">@${esc(u.username)}${u.location ? ` · ${esc(u.location)}` : ''} · Joined ${fmtDate(u.joined, { month: 'long', year: 'numeric' })}</p>${u.bio ? `<p class="bio">${esc(u.bio)}</p>` : ''}</div>
-      ${u.self ? '<a class="btn ghost" href="#/settings">Edit profile</a>' : ''}</div>
+      ${u.self ? '<a class="btn ghost" href="#/settings">Edit profile</a>'
+        : S.me ? `<button class="btn ${u.blocked ? 'ghost' : 'quiet'}" data-act="${u.blocked ? 'unblock' : 'block'}" data-username="${esc(u.username)}" data-name="${esc(u.name)}">${u.blocked ? 'Unblock' : 'Block'}</button>` : ''}</div>
+    ${u.blocked ? `<div class="notice" style="margin-top:18px">${icon('info')}<div>You blocked ${esc(u.name)}. You won’t see their comments, and they can’t comment on your projects or send you notifications.</div></div>` : ''}
     <nav class="tabs" style="margin:24px 0" aria-label="Profile sections"><a href="#/u/${esc(u.username)}" ${tab !== 'backed' ? 'aria-current="page"' : ''}>Created<span class="count">${d.created.length}</span></a><a href="#/u/${esc(u.username)}/backed" ${tab === 'backed' ? 'aria-current="page"' : ''}>Backed<span class="count">${u.backed_count}</span></a></nav>
     ${tab === 'backed' && !d.backed ? `<div class="empty"><h3>Backed projects are private</h3><p>${esc(u.name)} has chosen not to show what they back.</p></div>`
       : list.length ? cards(list, { }) : `<div class="empty"><h3>Nothing here yet</h3>${u.self && tab !== 'backed' ? '<a class="btn primary" href="#/start">Start a project</a>' : ''}</div>`}
@@ -1248,10 +1253,12 @@ function noteText(n) {
     case 'survey': return `${t} is getting ready to ship. Enter your shipping address.`;
     case 'payment_failed': return `Your payment for ${t} didn\u2019t go through. Update your card within 7 days to keep your pledge.`;
     case 'charged': return `Your card was charged ${money(x.amount || 0, n.project.currency)} for ${t}. Thank you!`;
+    case 'report': return `New report on ${x.comment ? `a comment on ${t}` : t}: “${esc(x.reason || '')}”`;
     default: return t;
   }
 }
 function noteHref(n) {
+  if (n.kind === 'report') return '#/admin';
   if (!n.project) return '#/activity';
   const b = `#/p/${n.project.slug}`, x = n.data || {};
   if (n.kind === 'update') return `${b}/updates/${x.n}`;
@@ -1315,7 +1322,14 @@ async function pageSettings(ctx) {
     catch (e) { toast(e.message, 'bad'); }
     if (ctx.stale && ctx.stale()) return;
   }
+  let blocked = null;
+  try { blocked = await rpc('gs_blocks'); } catch (e) { if (e.hint === 'auth') return needLogin('/settings'); }
+  if (ctx.stale && ctx.stale()) return;
   const u = S.me, theme = store.get('gs.theme', 'system'), st = u.stripe || {};
+  const blockedPanel = blocked ? `<div class="panel" id="blocked"><h2>Blocked accounts</h2>
+    ${blocked.length ? blocked.map(b => `<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="row" style="gap:10px">${avatar(b, 36)}<div><b>${esc(b.name)}</b><div class="muted small">@${esc(b.username)}</div></div></div>
+      <button class="btn ghost sm" data-act="unblock" data-username="${esc(b.username)}" data-name="${esc(b.name)}">Unblock</button></div>`).join('')
+    : '<p class="muted">You haven’t blocked anyone. To block someone, use Block on one of their comments or on their profile.</p>'}</div>` : '';
   const emailPanel = `<div class="panel" id="email"><h2>Email</h2>
     ${u.email ? `<p>Emails go to <b>${esc(u.email)}</b>. <button class="linkbtn" data-act="email-remove">Remove</button></p>
       <label class="check" style="margin-top:14px"><input type="checkbox" data-setting="email_notify" ${u.email_notify ? 'checked' : ''}><span>Email me about updates, replies and project results</span></label>`
@@ -1339,7 +1353,8 @@ async function pageSettings(ctx) {
         <label class="check" style="margin-bottom:18px"><input type="checkbox" name="show_backed" ${u.show_backed ? 'checked' : ''}><span>Show the projects I back on my public profile</span></label>
         <button class="btn primary" type="submit">Save profile</button>
       </form></div>
-    ${emailPanel}${payoutsPanel}
+    ${emailPanel}${payoutsPanel}${blockedPanel}
+    <div class="panel"><h2>Help & contact</h2><p class="muted">Questions, a problem with a pledge, or a safety concern? <a href="support.html">Get help or contact us</a>.</p></div>
     <div class="panel"><h2>Appearance</h2><div class="row">${[['system', 'Match device'], ['light', 'Light'], ['dark', 'Dark']].map(([k, v]) => `<button class="chip ${theme === k ? 'on' : ''}" data-act="theme" data-theme="${k}" aria-pressed="${theme === k}">${v}</button>`).join('')}</div></div>
     <div class="panel"><h2>Password</h2>
       <form data-form="password"><label class="field"><span>Current password</span><input class="input" type="password" name="old" autocomplete="current-password" required></label>
@@ -1370,7 +1385,8 @@ function pageHow() {
       ${testSite() ? '<h2>Test mode</h2><p>This Groundswell is running in <b>test mode</b>. Pledges are recorded and count toward goals exactly like real ones, but no card is taken and no money moves. It’s the way to try the whole experience before payments are switched on.</p>'
         : `<h2>Payments</h2><p>Pledges are handled by <b>Stripe</b>. When you back a project you save a card on Stripe’s secure page, and it’s charged only if the project reaches its goal. If a charge fails, you have 7 days to update your card. Creators are paid out by Stripe, minus a ${CONF.fee_bps / 100}% Groundswell fee.</p>`}
       <h2>Trust and safety</h2>
-      <p>If a project looks wrong, use <b>Report this project</b> at the bottom of its page. Moderators review reports and can hide projects that break the rules.</p>
+      <p>If a project looks wrong, use <b>Report this project</b> at the bottom of its page. To flag a comment, tap <b>Report</b> under it. Moderators review every report and can remove comments, hide projects and suspend accounts that break the <a href="terms.html">Terms</a>.</p>
+      <p>Tap <b>Block</b> on someone’s comment or profile and you won’t see their comments, they can’t comment on your projects, and they can’t send you notifications. Words that aren’t allowed are filtered out of comments, updates, profiles and projects. <a href="support.html">Help & contact</a> has more.</p>
     </div><p style="margin-top:28px"><a class="btn primary" href="#/start">Start a project</a> <a class="btn ghost" href="#/explore">Discover projects</a></p></div>`);
 }
 function adminSettings(s) {
@@ -1382,6 +1398,22 @@ function adminSettings(s) {
     <div class="switch" style="border-bottom:0"><div><b>Email</b><div class="muted small">${s.email_ready ? `Sending through Resend. ${s.emails_queued} queued${s.emails_failed ? `, ${s.emails_failed} failed this week` : ''}.` : 'Add a Resend API key to send email (see the README).'}</div></div><span class="tag ${s.email_ready ? 'good' : ''}">${s.email_ready ? 'On' : 'Off'}</span></div>
     ${s.charges_failed ? `<p class="muted small">${plural(s.charges_failed, 'charge')} waiting for backers to update their card.</p>` : ''}</div>`;
 }
+function adminWords(s) {
+  return `<div class="panel"><h2>Blocked words</h2><p class="muted" style="margin-bottom:14px">Comments, updates, profiles and launched projects can’t include these. Each matches the whole word and common endings (s, ed, ing…), so “class” doesn’t match “ass”.</p>
+      <form data-form="adm-words"><label class="field"><span class="sr">Blocked words, one per line</span><textarea class="textarea" name="words" rows="6" spellcheck="false">${esc((s.blocked_words || []).join('\n'))}</textarea></label>
+      <button class="btn ghost" type="submit">Save word list</button></form></div>`;
+}
+function adminReport(r) {
+  const c = r.comment, who = c ? c.author : r.project.creator, whoOff = c ? c.author_suspended : r.project.creator_suspended;
+  const what = c ? `<div class="small muted">Comment by ${who.username ? `<a href="#/u/${esc(who.username)}">${esc(who.name)}</a>` : esc(who.name)} on <a href="#/p/${r.project.slug}/comments">${esc(r.project.title)}</a></div>
+      <div style="margin-top:4px">${c.deleted ? '<span class="muted">(removed)</span>' : `“${esc(c.body)}”`}</div>`
+    : `<a href="#/p/${r.project.slug}">${esc(r.project.title)}</a>${r.project.hidden ? ' <span class="tag">Hidden</span>' : ''}`;
+  const acts = r.resolved ? '<span class="tag good">Resolved</span>' : `<div class="row" style="gap:6px;flex-wrap:wrap">
+      ${c && !c.deleted ? `<button class="btn danger sm" data-act="adm-del-comment" data-id="${r.id}" data-comment="${c.id}">Remove comment</button>` : ''}
+      ${who.username && !whoOff ? `<button class="btn ghost sm" data-act="adm-suspend" data-username="${esc(who.username)}" data-on="true">Suspend @${esc(who.username)}</button>` : ''}
+      <button class="btn ghost sm" data-act="adm-resolve" data-id="${r.id}">Resolve</button></div>`;
+  return `<tr><td style="white-space:normal;min-width:220px">${what}</td><td style="white-space:normal;min-width:200px">${esc(r.reason)}</td><td>${esc(r.by.name)}</td><td>${ago(r.at)}</td><td>${acts}</td></tr>`;
+}
 async function pageAdmin(ctx) {
   if (!S.token) return needLogin('/admin');
   setMain(loading());
@@ -1390,8 +1422,11 @@ async function pageAdmin(ctx) {
   setMain(`<div class="wrap page"><h1 class="page-title">Moderation</h1>
     <p class="muted">${plural(d.stats.users, 'member')} · ${plural(d.stats.samples, 'sample project')}</p>
     ${adminSettings(d.settings)}
-    <div class="panel" style="margin-top:20px"><h2>Reports</h2>${d.reports.length ? `<div class="table-wrap"><table><thead><tr><th>Project</th><th>Reason</th><th>From</th><th>When</th><th></th></tr></thead><tbody>
-      ${d.reports.map(r => `<tr><td><a href="#/p/${r.project.slug}">${esc(r.project.title)}</a>${r.project.hidden ? ' <span class="tag">Hidden</span>' : ''}</td><td style="white-space:normal;min-width:240px">${esc(r.reason)}</td><td>${esc(r.by.name)}</td><td>${ago(r.at)}</td><td>${r.resolved ? '<span class="tag good">Resolved</span>' : `<button class="btn ghost sm" data-act="adm-resolve" data-id="${r.id}">Resolve</button>`}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No reports.</p>'}</div>
+    <div class="panel" style="margin-top:20px"><h2>Reports</h2>${d.reports.length ? `<div class="table-wrap"><table><thead><tr><th>Reported</th><th>Reason</th><th>From</th><th>When</th><th></th></tr></thead><tbody>
+      ${d.reports.map(adminReport).join('')}</tbody></table></div>` : '<p class="muted">No reports.</p>'}</div>
+    ${(d.suspended || []).length ? `<div class="panel"><h2>Suspended accounts</h2>${d.suspended.map(u => `<div class="row" style="justify-content:space-between;margin-bottom:12px"><div><b>${esc(u.name)}</b> <span class="muted small">@${esc(u.username)} · since ${fmtDate(u.at)}</span></div>
+      <button class="btn ghost sm" data-act="adm-suspend" data-username="${esc(u.username)}" data-on="false">Lift suspension</button></div>`).join('')}</div>` : ''}
+    ${adminWords(d.settings)}
     <div class="panel"><h2>Projects</h2><div class="table-wrap"><table><thead><tr><th>Project</th><th>Status</th><th>Featured</th><th>Hidden</th></tr></thead><tbody>
       ${d.projects.map(p => `<tr><td><a href="#/p/${p.slug}">${esc(p.title)}</a>${p.sample ? ' <span class="tag">Sample</span>' : ''}</td><td>${esc(p.status)}</td>
         <td><button class="chip ${p.featured ? 'on' : ''}" data-act="adm-set" data-id="${p.id}" data-field="featured" data-on="${!p.featured}">${p.featured ? 'Featured' : 'Feature'}</button></td>
@@ -1482,6 +1517,27 @@ const ACT = {
     if (!await confirmBox('Delete this comment?', 'It will be removed for everyone.', { ok: 'Delete', danger: true })) return;
     await busy(btn, async () => { await rpc('gs_comment_delete', { comment: btn.dataset.id }); const th = $('#thread'); if (th && th._ctx) loadThread(th._ctx.d, th._ctx.updateId); });
   },
+  'report-comment': btn => {
+    const reasons = ['Spam or a scam', 'Harassment, bullying or hate', 'Sexual or violent content', 'Something else'];
+    const m = modal(`<h2>Report this comment</h2><p class="muted" style="margin-bottom:14px">The moderators will review it. Reports are private.</p>
+      <form data-form="report-comment" data-id="${btn.dataset.id}"><fieldset class="radios" style="border:0;padding:0;margin:0 0 14px"><legend class="sr">Reason</legend>
+      ${reasons.map((r, i) => `<label class="check" style="margin-bottom:10px"><input type="radio" name="kind" value="${r}" ${i ? '' : 'checked'}><span>${r}</span></label>`).join('')}</fieldset>
+      <label class="field"><span>Details <small>optional</small></span><textarea class="textarea" name="details" maxlength="800"></textarea></label>
+      <div class="acts"><button type="button" class="btn ghost" data-close>Cancel</button><button type="submit" class="btn primary">Send report</button></div></form>`);
+    $('form', m.el)._close = m.close;
+  },
+  async block(btn) {
+    const name = btn.dataset.name || '@' + btn.dataset.username;
+    if (!await confirmBox(`Block ${name}?`, 'You won’t see their comments, they can’t comment on your projects, and they can’t send you notifications. You can unblock them in Settings.', { ok: 'Block', danger: true })) return;
+    await busy(btn, async () => {
+      await rpc('gs_block', { username: btn.dataset.username, on: true });
+      toast(`Blocked ${name}`);
+      const th = $('#thread'); if (th && th._ctx) loadThread(th._ctx.d, th._ctx.updateId); else route();
+    });
+  },
+  async unblock(btn) {
+    await busy(btn, async () => { await rpc('gs_block', { username: btn.dataset.username, on: false }); toast(`Unblocked ${btn.dataset.name || '@' + btn.dataset.username}`); route(); });
+  },
   // pledge flow
   'pl-pick': (el, e) => { if (e.target.closest('input,button')) return; if (PL.sel === el.dataset.id) return; PL.sel = el.dataset.id; PL._scroll = true; renderPledge(); const inp = $(`[data-pl]`); inp && inp.focus({ preventScroll: true }); },
   'pl-next': () => {
@@ -1557,6 +1613,15 @@ const ACT = {
   // admin
   async 'adm-set'(btn) { await busy(btn, async () => { await rpc('gs_admin_set', { project: btn.dataset.id, field: btn.dataset.field, on: btn.dataset.on === 'true' }); PCACHE.clear(); route(); }); },
   async 'adm-resolve'(btn) { await busy(btn, async () => { await rpc('gs_admin_resolve', { report: +btn.dataset.id }); route(); }); },
+  async 'adm-del-comment'(btn) {
+    if (!await confirmBox('Remove this comment?', 'It will be removed for everyone, and the report marked resolved.', { ok: 'Remove', danger: true })) return;
+    await busy(btn, async () => { await rpc('gs_comment_delete', { comment: btn.dataset.comment }); await rpc('gs_admin_resolve', { report: +btn.dataset.id }); toast('Comment removed'); route(); });
+  },
+  async 'adm-suspend'(btn) {
+    const on = btn.dataset.on === 'true', who = '@' + btn.dataset.username;
+    if (on && !await confirmBox(`Suspend ${who}?`, 'They’re signed out everywhere and can’t log in until you lift the suspension. Their projects stay up unless you hide them.', { ok: 'Suspend', danger: true })) return;
+    await busy(btn, async () => { await rpc('gs_admin_suspend', { username: btn.dataset.username, on }); toast(on ? `Suspended ${who}` : `Lifted the suspension on ${who}`); route(); });
+  },
   async 'adm-samples'(btn) {
     if (!await confirmBox('Remove sample projects?', 'Deletes every sample project, its sample backers, and any test pledges and comments on them.', { ok: 'Remove samples', danger: true })) return;
     await busy(btn, async () => { const r = await rpc('gs_admin_remove_samples'); PCACHE.clear(); toast(`Removed ${plural(r.removed, 'sample project')}`); route(); });
@@ -1640,6 +1705,12 @@ const FORM = {
     await loadThread(th._ctx.d, th._ctx.updateId); toast('Comment posted');
   }),
   report: f => submitting(f, async () => { await rpc('gs_report', { project: f.dataset.id, reason: f.reason.value }); f._close(); toast('Thanks. The moderators will take a look.'); }),
+  'report-comment': f => submitting(f, async () => {
+    const details = f.details.value.trim();
+    await rpc('gs_comment_report', { comment: f.dataset.id, reason: f.kind.value + (details ? ': ' + details : '') });
+    f._close(); toast('Thanks. The moderators will take a look.');
+  }),
+  'adm-words': f => submitting(f, async () => { await rpc('gs_admin_words', { words: f.words.value }); toast('Word list saved'); route(); }),
   update: f => submitting(f, async () => {
     const p = DASH.d.project;
     await rpc('gs_update_post', { project: p.id, id: f.dataset.id || null, title: f.title.value, body: $('textarea[data-field="body"]', f).value, backers_only: f.backers_only.checked });
