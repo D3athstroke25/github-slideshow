@@ -274,6 +274,8 @@ main{min-height:calc(100vh - var(--head) - 160px)}
 .mobile-cta{position:fixed;left:0;right:0;bottom:calc(var(--tabbar) + env(safe-area-inset-bottom));z-index:35;padding:10px var(--gut);
   background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line)}
 @media (min-width:960px){.mobile-cta{display:none}}
+.mobile-cta{transition:transform .2s,opacity .2s}
+.mobile-cta.away{transform:translateY(130%);opacity:0;pointer-events:none}
 .has-mobile-cta{padding-bottom:84px}
 @media (min-width:960px){.has-mobile-cta{padding-bottom:56px}}
 

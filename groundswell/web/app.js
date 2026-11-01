@@ -530,6 +530,7 @@ let EXPLORE_MORE = null;
 const PCACHE = new Map();
 let POLL = null;
 const stopPoll = () => { if (POLL) clearInterval(POLL); POLL = null; };
+let CTA_OBS = null;
 async function getProject(slug, preview, fresh = false) {
   const hit = PCACHE.get(slug);
   if (!fresh && hit && Date.now() - hit.at < 30000) return hit.d;
@@ -678,6 +679,13 @@ function renderProject(ctx, d, tab, sub) {
     ${body}
     ${showCta ? `<div class="mobile-cta"><a class="btn ${pl ? 'ghost' : 'primary'} block lg" href="#/p/${p.slug}/pledge">${pl ? 'Manage your pledge' : 'Back this project'}</a></div>` : ''}
   </div>`);
+  // The sticky phone bar only appears once the funding panel (and its own button) scrolls away.
+  if (CTA_OBS) { CTA_OBS.disconnect(); CTA_OBS = null; }
+  const bar = $('.mobile-cta'), stats = $('#pstats');
+  if (bar && stats && 'IntersectionObserver' in window) {
+    CTA_OBS = new IntersectionObserver(([e]) => bar.classList.toggle('away', e.isIntersecting), { rootMargin: '0px 0px -150px 0px' });
+    CTA_OBS.observe(stats);
+  }
   const th = $('#thread');
   if (th) loadThread(d, th.dataset.update || null);
 }
