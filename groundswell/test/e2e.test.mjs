@@ -4,13 +4,14 @@
 import { createRequire } from 'module';
 import { execFileSync } from 'child_process';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import fs from 'fs';
 import pg from 'pg';
 import { startMockStripe } from './mock-stripe.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
-const HERE = path.dirname(new URL(import.meta.url).pathname);
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SHOTS = process.env.GS_SHOTS || '';
 const PORT = Number(process.env.GS_PG_PORT || 54329);
 Object.assign(process.env, {

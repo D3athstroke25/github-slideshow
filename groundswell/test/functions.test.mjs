@@ -2,6 +2,7 @@
 // Checkout, Stripe webhooks, the worker's charging and emails. The function runs in-process
 // against the local database, with mock-stripe.mjs standing in for Stripe and Resend.
 import { execFileSync } from 'child_process';
+import { fileURLToPath } from 'url';
 import pg from 'pg';
 import { startMockStripe, signedEvent } from './mock-stripe.mjs';
 
@@ -12,7 +13,7 @@ Object.assign(process.env, {
   RESEND_API_KEY: 're_test', RESEND_API_BASE: 'http://127.0.0.1:8099', GS_APP_URL: 'http://127.0.0.1:8098/',
   GS_EMAIL_FROM: 'Groundswell <hello@example.com>',
 });
-execFileSync(new URL('./reset-db.sh', import.meta.url).pathname, [String(PORT)], { stdio: 'inherit' });
+execFileSync(fileURLToPath(new URL('./reset-db.sh', import.meta.url)), [String(PORT)], { stdio: 'inherit' });
 const { startServer } = await import('./server.mjs');
 const { handle } = await import('../supabase/functions/gs/index.ts');
 const lib = await import('../supabase/functions/gs/lib.ts');
@@ -207,6 +208,51 @@ await block('email templates', async () => {
   ok('report email points moderators to Moderation', /a comment on Lamp/.test(r.subject) && r.text.includes('#/admin'), r.subject);
   const f = lib.form({ a: 1, b: { c: 'x y', d: [1, { e: 2 }] }, z: null });
   ok('Stripe form encoding', f === 'a=1&b%5Bc%5D=x%20y&b%5Bd%5D%5B0%5D=1&b%5Bd%5D%5B1%5D%5Be%5D=2', f);
+});
+
+await block('refunds and disputes are pulled back from the creator', async () => {
+  const ch = Object.values(stripeMock.state.charges).find(c => c.metadata?.gs_project === proj.slug && c.amount === 11000);
+  const tr = stripeMock.state.transfers[ch.transfer];
+  ok('the creator got the charge less the fee', tr.amount === 10120, tr);
+  const hook = async (type, object) => { const ev = signedEvent('whsec_test', type, object); return post('/functions/v1/gs/webhook', ev.body, { 'stripe-signature': ev.header }); };
+  ch.amount_refunded = 5500;
+  const r = await hook('charge.refunded', { ...ch });
+  ok('a half refund takes half the creator\'s share back', r.status === 200 && tr.amount_reversed === 5060, { status: r.status, body: r.body, tr });
+  await hook('charge.refunded', { ...ch });
+  ok('the same refund event twice takes it back once', tr.amount_reversed === 5060);
+  await hook('charge.dispute.created', { id: 'dp_1', charge: ch.id, status: 'needs_response' });
+  ok('a dispute takes the rest back while it is open', tr.amount_reversed === 10120, tr);
+  await hook('charge.dispute.closed', { id: 'dp_1', charge: ch.id, status: 'won' });
+  const back = Object.values(stripeMock.state.transfers).find(t => t.metadata?.gs_reason === 'dispute-won-dp_1');
+  ok('a won dispute pays the creator back, less the refund', back && back.amount === 5060 && back.destination === tr.destination && back.source_transaction === ch.id, back);
+  await hook('charge.dispute.closed', { id: 'dp_1', charge: ch.id, status: 'won' });
+  ok('and only once', Object.values(stripeMock.state.transfers).filter(t => t.metadata?.gs_reason === 'dispute-won-dp_1').length === 1);
+});
+
+await block('buying the featured spot', async () => {
+  let e = await rpc('gs_project_new', { p_token: creator.token, p_title: 'Featured lamp', p_category: 'design' });
+  e = await rpc('gs_project_save', { p_token: creator.token, p_project: e.id, p_patch: { blurb: 'A lamp that wants attention.', story: STORY, risks: 'Parts could be late; we have a second supplier lined up.', goal_cents: 15000 } });
+  e = await rpc('gs_reward_save', { p_token: creator.token, p_project: e.id, p_reward: { title: 'Lamp', amount: 9000 } });
+  const fp = await rpc('gs_project_launch', { p_token: creator.token, p_project: e.id });
+  const inApp = await pay({ action: 'feature', token: creator.token, project: fp.id, app: true });
+  ok('the iPhone app can\'t buy it', inApp.status === 400 && /website/.test(inApp.body.message), inApp.body);
+  const notMine = await pay({ action: 'feature', token: other.token, project: fp.id });
+  ok('only the creator can buy it', notMine.status === 400, notMine);
+  const co = await pay({ action: 'feature', token: creator.token, project: fp.id, return_base: 'http://127.0.0.1:8098/' });
+  ok('checkout link returned', co.status === 200 && co.body.url.includes('/checkout/'), co.body);
+  const req = stripeMock.state.requests.filter(r => r.path === '/v1/checkout/sessions').at(-1);
+  ok('a one-off payment to Groundswell', req.body.mode === 'payment' && req.body.line_items[0].price_data.unit_amount === '4900' && !req.body.payment_intent_data.transfer_data && req.body.metadata.gs_kind === 'feature', req.body);
+  const loc = await follow(co.body.url + '/complete');
+  const session = new URL(loc).searchParams.get('session');
+  ok('Stripe sends the creator back to the dashboard', new URL(loc).searchParams.get('to') === `/dash/${fp.id}?featured=1`, loc);
+  const c = await pay({ action: 'confirm', token: creator.token, session });
+  ok('confirming features the project', c.body.done && c.body.kind === 'feature' && c.body.until, c.body);
+  const sess = stripeMock.state.sessions[session];
+  const ev = signedEvent('whsec_test', 'checkout.session.completed', sess);
+  ok('the webhook for the same payment is harmless', (await post('/functions/v1/gs/webhook', ev.body, { 'stripe-signature': ev.header })).status === 200
+    && (await sql(`select count(*)::int n from feature_purchases`))[0].n === 1);
+  const home = await rpc('gs_home', {});
+  ok('it is the featured project on the home page', home.featured && home.featured.id === fp.id, home.featured && home.featured.title);
 });
 
 await block('payments switched off', async () => {

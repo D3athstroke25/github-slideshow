@@ -733,14 +733,22 @@ async function pagePledge(ctx, slug) {
   const mine = d.me.pledge && d.me.pledge.status === 'active' ? d.me.pledge : null;
   let sel = ctx.q.reward || (mine ? (mine.reward_id || 'none') : null);
   if (sel && sel !== 'none' && !d.rewards.some(r => r.id === sel)) sel = null;
-  const base = id => { const r = d.rewards.find(x => x.id === id); return r ? r.amount + (r.ships ? r.shipping : 0) : 100; };
-  PL = { d, sel, step: 'pick', mine, extra: {} };
-  if (mine) PL.extra[mine.reward_id || 'none'] = mine.reward_id ? Math.max(0, mine.amount - base(mine.reward_id)) : mine.amount;
+  const base = id => { const r = d.rewards.find(x => x.id === id); return r ? r.amount + (r.ships ? r.shipping : 0) : minPledge(p); };
+  PL = { d, sel, step: 'pick', mine, extra: {}, tipPct: 0 };
+  if (mine) {
+    PL.extra[mine.reward_id || 'none'] = mine.reward_id ? Math.max(0, mine.amount - base(mine.reward_id)) : mine.amount;
+    if (mine.tip) PL.tipPct = TIPS.reduce((a, t) => Math.abs(t - mine.tip * 100 / mine.amount) < Math.abs(a - mine.tip * 100 / mine.amount) ? t : a, 0);
+  }
   renderPledge();
 }
+// Real payments start at $5, so Stripe's 30¢ per charge can't swallow the fee.
+const minPledge = p => p.payments === 'stripe' ? 500 : 100;
+// Optional tip for Groundswell, as a percent of the pledge. Only on real-payment projects.
+const TIPS = [0, 5, 10, 15];
+const plTip = () => PL.d.project.payments === 'stripe' ? Math.round(plTotal() * PL.tipPct / 100) : 0;
 function plTotal() {
   const { d, sel, extra } = PL;
-  if (sel === 'none') return extra.none ?? 100;
+  if (sel === 'none') return extra.none ?? minPledge(d.project);
   const r = d.rewards.find(x => x.id === sel); if (!r) return 0;
   return r.amount + (r.ships ? r.shipping : 0) + (extra[sel] || 0);
 }
@@ -748,7 +756,7 @@ function renderPledge() {
   const { d, sel, step, mine } = PL, p = d.project, cur = p.currency;
   const head = `<div class="pl-head">${cover(p)}<div><p class="muted small">${mine ? 'Changing your pledge to' : 'You\u2019re backing'}</p><h1>${esc(p.title)}</h1></div></div>`;
   if (step === 'review') {
-    const r = d.rewards.find(x => x.id === sel), total = plTotal();
+    const r = d.rewards.find(x => x.id === sel), total = plTotal(), tip = plTip();
     const ship = r && r.ships ? r.shipping : 0, bonus = r ? total - r.amount - ship : 0;
     setMain(`<div class="wrap page narrow">${head}
       <div class="panel"><h2>Review your pledge</h2>
@@ -759,22 +767,25 @@ function renderPledge() {
           ${r && bonus ? `<div><span>Bonus support</span><span>${money(bonus, cur)}</span></div>` : ''}
           ${r && r.est_delivery ? `<div><span>Estimated delivery</span><span>${fmtMonth(r.est_delivery)}</span></div>` : ''}
           <div class="total"><span>Total pledge</span><span>${money(total, cur)}</span></div>
+          ${p.payments === 'stripe' && tip ? `<div><span>Tip for Groundswell</span><span>${money(tip, cur)}</span></div><div class="total"><span>Charged if funded</span><span>${money(total + tip, cur)}</span></div>` : ''}
         </div></div>
+      ${p.payments === 'stripe' ? `<div class="panel" style="margin-top:16px"><h2>Add a tip for Groundswell?</h2><p class="muted small" style="margin-bottom:12px">Optional. Tips keep Groundswell running and don’t count toward the goal. You’re only charged if the project is funded.</p>
+        <div class="chips" role="radiogroup" aria-label="Tip">${TIPS.map(t => `<button type="button" class="chip" data-act="pl-tip" data-pct="${t}" role="radio" aria-checked="${PL.tipPct === t}">${t ? t + '%' : 'No tip'}</button>`).join('')}</div></div>` : ''}
       <div style="display:grid;gap:12px;margin-top:16px">
         ${testNotice(p)}
         <div class="notice">${icon('info')}<div>You’ll only be charged if this project reaches its goal by <b>${fmtDateTime(p.deadline)}</b>. You can change or cancel your pledge until then.</div></div>
       </div>
       <form data-form="pledge" style="margin-top:20px">
         <label class="check"><input type="checkbox" name="ok" required><span>I understand that Groundswell doesn’t guarantee projects or rewards. The creator is responsible for delivering what they promised.</span></label>
-        <div class="row" style="margin-top:20px"><button type="button" class="btn ghost" data-act="pl-back">${icon('chevL')}Back</button><button type="submit" class="btn primary lg" style="flex:1">${p.payments === 'stripe' && !(mine && mine.card) ? `Continue to payment \u00b7 ${money(total, cur)}` : `${mine ? 'Update pledge' : 'Pledge'} ${money(total, cur)}`}</button></div>
+        <div class="row" style="margin-top:20px"><button type="button" class="btn ghost" data-act="pl-back">${icon('chevL')}Back</button><button type="submit" class="btn primary lg" style="flex:1">${p.payments === 'stripe' && !(mine && mine.card) ? `Continue to payment \u00b7 ${money(total + tip, cur)}` : `${mine ? 'Update pledge' : 'Pledge'} ${money(total + tip, cur)}`}</button></div>
       </form></div>`);
     return;
   }
   const opt = (id, inner, disabled = false) => `<div class="reward ${sel === id ? 'sel' : ''} ${disabled ? 'soldout' : ''}" data-act="${disabled ? '' : 'pl-pick'}" data-id="${id}" role="radio" aria-checked="${sel === id}" tabindex="${disabled ? -1 : 0}"><span class="radio"></span>${inner}</div>`;
   const expand = id => {
     if (sel !== id) return '';
-    if (id === 'none') return `<div class="expand"><label class="field" style="margin:0"><span>Pledge amount</span><div class="money"><span class="cur">${esc(curSymbol(cur))}</span><input class="input" data-pl="none" inputmode="decimal" value="${units(PL.extra.none ?? 100)}" aria-label="Pledge amount"></div></label>
-      <div class="row between" style="margin-top:14px"><span class="muted small">Minimum ${money(100, cur)}</span><button class="btn primary" data-act="pl-next">Continue</button></div></div>`;
+    if (id === 'none') return `<div class="expand"><label class="field" style="margin:0"><span>Pledge amount</span><div class="money"><span class="cur">${esc(curSymbol(cur))}</span><input class="input" data-pl="none" inputmode="decimal" value="${units(PL.extra.none ?? minPledge(p))}" aria-label="Pledge amount"></div></label>
+      <div class="row between" style="margin-top:14px"><span class="muted small">Minimum ${money(minPledge(p), cur)}</span><button class="btn primary" data-act="pl-next">Continue</button></div></div>`;
     const r = d.rewards.find(x => x.id === id);
     return `<div class="expand"><label class="field" style="margin:0"><span>Bonus support <small>optional</small></span><div class="money"><span class="cur">${esc(curSymbol(cur))}</span><input class="input" data-pl="${id}" inputmode="decimal" value="${units(PL.extra[id] || 0)}" aria-label="Bonus support"></div>
       <span class="hint">A bonus helps the project hit its goal, and doesn’t change your reward.</span></label>
@@ -1047,6 +1058,11 @@ async function pageDash(ctx) {
   if (!S.token) return needLogin();
   const id = ctx.parts[1];
   setMain(loading());
+  // Back from buying the featured spot: make sure it's recorded before showing the dashboard.
+  if (ctx.q.featured && ctx.q.session) {
+    try { const r = await gsFn('pay', { action: 'confirm', session: ctx.q.session }); if (r.done) toast(`Your project is featured until ${fmtDate(r.until)}`); }
+    catch (e) { toast(e.message, 'bad'); }
+  }
   const d = await rpc('gs_dashboard', { project: id });
   if (ctx.stale()) return;
   DASH = { d, editing: null };
@@ -1067,6 +1083,7 @@ function renderDash(tab) {
         <div class="kpi"><div class="l">${live ? 'Time left' : 'Ended'}</div><div class="v">${live ? `${t.n} ${t.unit}` : fmtDate(p.ended_at, { month: 'short', day: 'numeric' })}</div><div class="d">${live ? `Ends ${fmtDate(p.deadline)}` : p.status}</div></div>
       </div>
       ${afterPanels(d) ? `<div class="dash-grid">${afterPanels(d)}</div>` : ''}
+      ${featurePanel(d)}
       <div class="dash-grid">
         <div class="panel"><div class="row between"><h2 style="margin:0">Funding over time</h2><button class="btn quiet sm" data-act="dash-table">Show as table</button></div><p class="muted small" style="margin:4px 0 14px">Total pledged since launch, against your goal.</p><div class="chart" id="chart"></div><div id="chart-table" hidden></div></div>
         <div class="panel"><h2>Backers by reward</h2><div class="hbars">${rw.map(r => `<div class="hbar"><div class="t"><span>${esc(r.name)}</span><span class="num">${r.n.toLocaleString()}</span></div><div class="track"><i style="width:${(r.n / maxN) * 100}%"></i></div></div>`).join('')}</div></div>
@@ -1107,6 +1124,19 @@ window.addEventListener('resize', debounce(() => { if (DASH && $('#chart') && !$
 function pledgeStatus(pl, payments) {
   if (payments === 'stripe' && pl.charge_status) return { due: '<span class="tag">Charging soon</span>', processing: '<span class="tag">Charging</span>', paid: '<span class="tag good">Paid</span>', failed: '<span class="tag bad">Payment failed</span>', abandoned: '<span class="tag bad">Dropped</span>' }[pl.charge_status];
   return { active: '<span class="tag">Active</span>', collected: `<span class="tag good">Collected${payments === 'stripe' ? '' : ' (test)'}</span>`, dropped: '<span class="tag">Not collected</span>', canceled: '<span class="tag bad">Canceled</span>' }[pl.status] || esc(pl.status);
+}
+// Creators can buy the home page's featured spot. Sold on the website only: in the iPhone app
+// it would have to be an Apple in-app purchase, so the app doesn't offer it.
+function featurePanel(d) {
+  const p = d.project, f = d.feature;
+  if (NATIVE || !f || p.status !== 'live' || !CONF.stripe) return '';
+  const offer = `Put ${esc(p.title)} at the top of the home page for ${plural(f.days, 'day')}, for ${money(f.price, p.currency)}.`;
+  let inner;
+  if (f.until && new Date(f.until) > new Date()) inner = `<p>${icon('check')} Featured on the home page until <b>${fmtDate(f.until)}</b>.</p>${f.booked_until ? '' : `<button class="btn ghost" style="margin-top:12px" data-act="feature-buy">Add ${plural(f.days, 'day')} \u00b7 ${money(f.price, p.currency)}</button>`}`;
+  else if (f.featured) inner = `<p>${icon('check')} Groundswell\u2019s moderators are featuring this project.</p>`;
+  else if (f.booked_until) inner = `<p class="muted">${offer} The spot is booked until ${fmtDate(f.booked_until)}.</p>`;
+  else inner = `<p class="muted" style="margin-bottom:14px">${offer} Paid once, by card. It ends on its own.</p><button class="btn primary" data-act="feature-buy">Feature this project</button>`;
+  return `<div class="panel" style="margin-top:20px"><h2>Get featured</h2>${inner}</div>`;
 }
 // Payments and shipping survey panels for a finished project.
 function afterPanels(d) {
@@ -1383,7 +1413,7 @@ function pageHow() {
         <li><b>Launch for 1 to 60 days.</b> Your goal and deadline are fixed at launch so backers know exactly what they’re supporting.</li>
         <li><b>Keep backers in the loop.</b> Your dashboard shows funding over time, reward choices and every backer, and lets you post updates.</li></ul>
       ${testSite() ? '<h2>Test mode</h2><p>This Groundswell is running in <b>test mode</b>. Pledges are recorded and count toward goals exactly like real ones, but no card is taken and no money moves. It’s the way to try the whole experience before payments are switched on.</p>'
-        : `<h2>Payments</h2><p>Pledges are handled by <b>Stripe</b>. When you back a project you save a card on Stripe’s secure page, and it’s charged only if the project reaches its goal. If a charge fails, you have 7 days to update your card. Creators are paid out by Stripe, minus a ${CONF.fee_bps / 100}% Groundswell fee.</p>`}
+        : `<h2>Payments</h2><p>Pledges are handled by <b>Stripe</b>. When you back a project you save a card on Stripe’s secure page, and it’s charged only if the project reaches its goal. If a charge fails, you have 7 days to update your card. Pledges start at $5, and you can add an optional tip for Groundswell. Creators are paid out by Stripe, minus a ${CONF.fee_bps / 100}% Groundswell fee.</p>`}
       <h2>Trust and safety</h2>
       <p>If a project looks wrong, use <b>Report this project</b> at the bottom of its page. To flag a comment, tap <b>Report</b> under it. Moderators review every report and can remove comments, hide projects and suspend accounts that break the <a href="terms.html">Terms</a>.</p>
       <p>Tap <b>Block</b> on someone’s comment or profile and you won’t see their comments, they can’t comment on your projects, and they can’t send you notifications. Words that aren’t allowed are filtered out of comments, updates, profiles and projects. <a href="support.html">Help & contact</a> has more.</p>
@@ -1395,6 +1425,9 @@ function adminSettings(s) {
       <div class="row"><button class="chip ${s.payments !== 'stripe' ? 'on' : ''}" data-act="adm-pay" data-mode="test" aria-pressed="${s.payments !== 'stripe'}">Test</button><button class="chip ${s.payments === 'stripe' ? 'on' : ''}" data-act="adm-pay" data-mode="stripe" aria-pressed="${s.payments === 'stripe'}" ${s.stripe_ready ? '' : 'disabled'}>Real (Stripe)</button></div></div>
     <form class="switch" data-form="adm-fee"><div><b>Platform fee</b><div class="muted small">Kept from each successful charge; the rest goes to the creator.</div></div>
       <div class="row"><input class="input" name="fee" inputmode="decimal" style="width:84px" value="${s.fee_bps / 100}" aria-label="Fee percent"><span>%</span><button class="btn ghost sm" type="submit">Save</button></div></form>
+    <form class="switch" data-form="adm-feature"><div><b>Featured spot</b><div class="muted small">Creators can buy the top of the home page on the website. One project at a time.</div></div>
+      <div class="row"><span>$</span><input class="input" name="price" inputmode="decimal" style="width:72px" value="${units(CONF.feature_price || 4900)}" aria-label="Featured price"><span>for</span><input class="input" name="days" inputmode="numeric" style="width:56px" value="${CONF.feature_days || 7}" aria-label="Featured days"><span>days</span><button class="btn ghost sm" type="submit">Save</button></div></form>
+    ${s.revenue ? `<div class="switch"><div><b>Groundswell\u2019s income so far</b><div class="muted small">Fees ${money(s.revenue.fees, 'USD')} \u00b7 tips ${money(s.revenue.tips, 'USD')} \u00b7 featured spots ${money(s.revenue.featured, 'USD')}. Before Stripe\u2019s own fees; amounts in other currencies are added as if they were dollars.</div></div></div>` : ''}
     <div class="switch" style="border-bottom:0"><div><b>Email</b><div class="muted small">${s.email_ready ? `Sending through Resend. ${s.emails_queued} queued${s.emails_failed ? `, ${s.emails_failed} failed this week` : ''}.` : 'Add a Resend API key to send email (see the README).'}</div></div><span class="tag ${s.email_ready ? 'good' : ''}">${s.email_ready ? 'On' : 'Off'}</span></div>
     ${s.charges_failed ? `<p class="muted small">${plural(s.charges_failed, 'charge')} waiting for backers to update their card.</p>` : ''}</div>`;
 }
@@ -1477,6 +1510,7 @@ const ACT = {
   },
   'stripe-connect': btn => busy(btn, async () => { const r = await gsFn('pay', { action: 'connect' }); await openOut(r.url); }),
   'stripe-refresh': btn => busy(btn, async () => { const r = await gsFn('pay', { action: 'connect_refresh' }); await refreshUnread(); toast(r.ready ? 'Stripe is connected.' : 'Stripe still needs a few details from you.'); pageSettings({ q: {} }); }),
+  'feature-buy': btn => busy(btn, async () => { const r = await gsFn('pay', { action: 'feature', project: DASH.d.project.id }); await openOut(r.url); }),
   'stripe-dashboard': btn => busy(btn, async () => { const r = await gsFn('pay', { action: 'dashboard' }); await openOut(r.url); }),
   async 'email-remove'(btn) {
     if (!await confirmBox('Remove your email?', 'You\u2019ll stop getting emails, and you\u2019ll need your recovery code to reset your password.', { ok: 'Remove', danger: true })) return;
@@ -1545,12 +1579,15 @@ const ACT = {
     if (!sel) return toast('Pick a reward first.', 'bad');
     const inp = $('[data-pl]'), v = inp ? toCents(inp.value || '0') : 0;
     if (v === null) return toast('Enter an amount like 25 or 25.50.', 'bad');
-    if (sel === 'none' && v < 100) return toast(`The minimum pledge is ${money(100, cur)}.`, 'bad');
+    const min = minPledge(d.project);
+    if (sel === 'none' && v < min) return toast(`The minimum pledge is ${money(min, cur)}.`, 'bad');
     PL.extra[sel] = v;
+    if (plTotal() < min) return toast(`The minimum pledge is ${money(min, cur)}. Add bonus support to reach it.`, 'bad');
     if (plTotal() > 1000000) return toast(`Pledges are limited to ${money(1000000, cur)}.`, 'bad');
     PL.step = 'review'; renderPledge(); window.scrollTo(0, 0);
   },
   'pl-back': () => { PL.step = 'pick'; renderPledge(); },
+  'pl-tip': el => { const ok = $('[name=ok]'), was = ok && ok.checked; PL.tipPct = Number(el.dataset.pct); renderPledge(); if (was) $('[name=ok]').checked = true; },
   async 'pl-cancel'(btn) {
     if (!await confirmBox('Cancel your pledge?', 'You’ll lose your backer number and your reward spot, if it’s limited. You can pledge again while the campaign is live.', { ok: 'Cancel pledge', danger: true })) return;
     await busy(btn, async () => { await rpc('gs_pledge_cancel', { project: PL.d.project.id }); PCACHE.delete(PL.d.project.slug); toast('Your pledge was canceled'); go('/p/' + PL.d.project.slug); });
@@ -1691,7 +1728,7 @@ const FORM = {
   }),
   pledge: f => submitting(f, async () => {
     const { d, sel } = PL;
-    const r = await rpc('gs_pledge', { project: d.project.id, reward: sel === 'none' ? null : sel, amount: plTotal() });
+    const r = await rpc('gs_pledge', { project: d.project.id, reward: sel === 'none' ? null : sel, amount: plTotal(), ...(plTip() ? { tip: plTip() } : {}) });
     if (r.needs_card) { await startCheckout({ intent: r.intent }, d.project.slug); return; }
     PCACHE.delete(d.project.slug);
     if (PL.mine) { toast('Your pledge was updated'); go('/p/' + d.project.slug); return; }
@@ -1732,6 +1769,11 @@ const FORM = {
     const pct = parseFloat(String(f.fee.value).replace(',', '.'));
     if (!Number.isFinite(pct)) throw new Error('Enter a percentage, like 8.');
     await rpc('gs_admin_settings', { patch: { fee_bps: Math.round(pct * 100) } }); await loadConfig(); toast('Fee saved'); route();
+  }),
+  'adm-feature': f => submitting(f, async () => {
+    const price = toCents(f.price.value), days = parseInt(f.days.value, 10);
+    if (price === null) throw new Error('Enter a price, like 49.');
+    await rpc('gs_admin_settings', { patch: { feature_price_cents: price, feature_days: days } }); await loadConfig(); toast('Featured spot saved'); route();
   }),
   profile: f => submitting(f, async () => { setMe(await rpc('gs_profile_save', { patch: { name: f.name.value, location: f.location.value, bio: f.bio.value, show_backed: f.show_backed.checked } })); toast('Profile saved'); }),
   password: f => submitting(f, async () => { await rpc('gs_password_change', { old: f.old.value, new: f.new.value }); f.reset(); toast('Password changed'); }),
