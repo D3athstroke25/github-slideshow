@@ -1,7 +1,7 @@
 // A small in-memory stand-in for the parts of Stripe (and Resend) that Groundswell uses, so the
 // payment and email code can be tested end to end without accounts or network access.
-// Stripe: account, accounts, account_links, login_links, customers, checkout sessions (setup mode),
-// setup_intents, payment_methods, payment_intents. It also serves fake Checkout and onboarding
+// Stripe: account, accounts, account_links, login_links, customers, checkout sessions (setup and
+// payment mode), setup_intents, payment_methods, payment_intents, charges, transfers and reversals. It also serves fake Checkout and onboarding
 // pages that redirect back like the real ones. The card "pm_card_declined" is always declined.
 import http from 'http';
 import crypto from 'crypto';
@@ -21,7 +21,7 @@ export function parseForm(body) {
 }
 
 export function startMockStripe(port = 8099) {
-  const S = { accounts: {}, customers: {}, sessions: {}, setupIntents: {}, pms: {}, pis: {}, idem: {}, requests: [], emails: [], n: 0 };
+  const S = { accounts: {}, customers: {}, sessions: {}, setupIntents: {}, pms: {}, pis: {}, charges: {}, transfers: {}, idem: {}, requests: [], emails: [], n: 0 };
   const base = `http://127.0.0.1:${port}`;
   const id = p => `${p}_${++S.n}`;
   const send = (res, status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -51,6 +51,10 @@ export function startMockStripe(port = 8099) {
     if (p.startsWith('/checkout/')) {
       const sid = p.split('/')[2], s = S.sessions[sid];
       if (!s) return page(res, 'Session not found');
+      if (p.endsWith('/complete') && s.mode === 'payment') {
+        Object.assign(s, { status: 'complete', payment_status: 'paid', amount_total: +s.line_items[0].price_data.unit_amount });
+        return redirect(res, s.success_url.replace('{CHECKOUT_SESSION_ID}', s.id));
+      }
       if (p.endsWith('/complete')) {
         const pmId = url.searchParams.get('card') === 'declined' ? 'pm_card_declined' : id('pm');
         S.pms[pmId] = { id: pmId, object: 'payment_method', card: { brand: pmId === 'pm_card_declined' ? 'visa' : 'visa', last4: pmId === 'pm_card_declined' ? '0002' : '4242' }, customer: s.customer };
@@ -100,8 +104,9 @@ export function startMockStripe(port = 8099) {
     if (m === 'POST' && p === '/v1/account_links') return reply(200, { url: `${base}/connect/${body.account}?return=${encodeURIComponent(body.return_url)}` });
     if (m === 'POST' && p === '/v1/customers') { const c = { id: id('cus'), ...body }; S.customers[c.id] = c; return reply(200, c); }
     if (m === 'POST' && p === '/v1/checkout/sessions') {
-      if (body.mode !== 'setup' || !body.success_url || !body.customer) return err(res, 400, 'invalid_request_error', 'bad session params');
-      const s = { id: 'cs_test_' + crypto.randomBytes(6).toString('hex'), object: 'checkout.session', status: 'open', mode: 'setup', ...body, setup_intent: null };
+      const okSetup = body.mode === 'setup' && body.customer, okPay = body.mode === 'payment' && body.line_items?.[0]?.price_data?.unit_amount;
+      if (!(okSetup || okPay) || !body.success_url) return err(res, 400, 'invalid_request_error', 'bad session params');
+      const s = { id: 'cs_test_' + crypto.randomBytes(6).toString('hex'), object: 'checkout.session', status: 'open', payment_status: 'unpaid', ...body, setup_intent: null };
       s.url = `${base}/checkout/${s.id}`; S.sessions[s.id] = s; return reply(200, s);
     }
     if (m === 'GET' && parts[0] === 'checkout' && parts[1] === 'sessions') {
@@ -116,7 +121,25 @@ export function startMockStripe(port = 8099) {
         pi.status = 'requires_payment_method';
         return reply(402, { error: { type: 'card_error', code: 'card_declined', message: 'Your card was declined.', payment_intent: { id: pi.id } } });
       }
-      pi.status = 'succeeded'; return reply(200, pi);
+      // A destination charge: the charge, and the transfer of everything but the fee to the creator.
+      const tr = { id: id('tr'), object: 'transfer', amount: +body.amount - +(body.application_fee_amount || 0), amount_reversed: 0, currency: body.currency, destination: body.transfer_data?.destination };
+      const ch = { id: id('ch'), object: 'charge', amount: +body.amount, amount_refunded: 0, currency: body.currency, metadata: body.metadata, payment_intent: pi.id, transfer: tr.id };
+      S.transfers[tr.id] = tr; S.charges[ch.id] = ch;
+      pi.status = 'succeeded'; pi.latest_charge = ch.id; return reply(200, pi);
+    }
+    if (m === 'GET' && parts[0] === 'charges') {
+      const ch = S.charges[parts[1]]; if (!ch) return err(res, 404, 'invalid_request_error', 'No such charge');
+      return send(res, 200, { ...ch, transfer: S.transfers[ch.transfer] || null });
+    }
+    if (m === 'POST' && parts[0] === 'transfers' && parts[2] === 'reversals') {
+      const tr = S.transfers[parts[1]]; if (!tr) return err(res, 404, 'invalid_request_error', 'No such transfer');
+      const amount = +body.amount;
+      if (!(amount > 0) || tr.amount_reversed + amount > tr.amount) return err(res, 400, 'invalid_request_error', 'Reversal is more than the transfer');
+      tr.amount_reversed += amount; return reply(200, { id: id('trr'), object: 'transfer_reversal', amount, transfer: tr.id, metadata: body.metadata });
+    }
+    if (m === 'POST' && p === '/v1/transfers') {
+      const tr = { id: id('tr'), object: 'transfer', amount: +body.amount, amount_reversed: 0, currency: body.currency, destination: body.destination, source_transaction: body.source_transaction, metadata: body.metadata };
+      S.transfers[tr.id] = tr; return reply(200, tr);
     }
     return err(res, 404, 'invalid_request_error', `Unrecognized request URL (${m} ${p})`);
   });

@@ -60,6 +60,10 @@ Real payments use **Stripe Connect** with destination charges:
 - The money goes to the creator's connected Stripe account, less the platform fee (8% by default, set in Moderation). Groundswell's Stripe account pays Stripe's processing fees out of that.
 - A declined card puts the pledge in "payment failed": the backer gets a notification and an email, and has 7 days to update the card. After that the pledge is dropped.
 - A project keeps the mode it launched with. Switching to real payments never turns existing test pledges into charges.
+- Pledges on real-payment projects start at **$5**, so Stripe's 30¢ per charge can't swallow the fee.
+- Backers can add an optional **tip for Groundswell** (5, 10 or 15%) on the review screen. It's charged with the pledge, kept in full by the platform, and doesn't count toward the goal.
+- **Refunds and disputes** come out of Groundswell's Stripe balance first (that's how destination charges work), so the `gs` function takes the creator's share back: in proportion when a charge is refunded, all of it while a dispute is open, and it pays the creator again if the dispute is won.
+- **Featured spot:** creators can buy the top of the home page for a week ($49 by default; price and length are set in Moderation), one project at a time. It's sold on the **website only**: inside the iPhone app it would have to be an Apple in-app purchase, so the app doesn't show it. Moderation shows what Groundswell has earned from fees, tips and featuring.
 
 ### Turning on real payments
 
@@ -67,7 +71,7 @@ Real payments use **Stripe Connect** with destination charges:
 2. In the Stripe dashboard, open **Connect**, choose **Express** accounts, and fill in the platform profile and branding.
 3. **Developers → Webhooks → Add endpoint**:
    - Set the URL to `https://mrvuxjkahorglqnmyamh.supabase.co/functions/v1/gs/webhook`.
-   - Select these events: `checkout.session.completed`, `account.updated`, `payment_intent.succeeded` and `payment_intent.payment_failed`.
+   - Select these events: `checkout.session.completed`, `account.updated`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`.
    - Turn on **Listen to events on Connected accounts**, so `account.updated` arrives for creators.
 4. In Supabase, open **groundswell → Edge Functions → Secrets** and add `STRIPE_SECRET_KEY` (`sk_live_…`, or `sk_test_…` to try it first) and `STRIPE_WEBHOOK_SECRET` (the endpoint's `whsec_…`).
 5. Within a minute the worker reports Stripe as ready. In the app, go to **Moderation → Payments** and choose **Real (Stripe)**.
@@ -84,7 +88,7 @@ Update the Terms and Privacy policy with your business details, fees and refund 
 
 ## Going live (one-time)
 
-1. In the Supabase SQL Editor, run any migrations not yet applied, in order. `004` adds email, payments and surveys, `005` schedules the worker, and `006` adds reporting comments, blocking, the word filter and suspensions.
+1. In the Supabase SQL Editor, run any migrations not yet applied, in order. `004` adds email, payments and surveys, `005` schedules the worker, `006` adds reporting comments, blocking, the word filter and suspensions, and `007` adds the $5 minimum, tips and the featured spot.
    - Deploy the function with JWT verification off: `supabase functions deploy gs --no-verify-jwt`.
 2. Merge into `main`. The **Deploy Kinboard and Groundswell to GitHub Pages** workflow publishes:
    - Kinboard: https://d3athstroke25.github.io/github-slideshow/
