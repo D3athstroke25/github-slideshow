@@ -105,7 +105,11 @@ Answer honestly for what the app allows:
 **Marketing URL (optional):** `https://d3athstroke25.github.io/github-slideshow/groundswell/`
 **Copyright:** `2026 <your legal name or company>`
 
-**Screenshots:** iPhone 6.9" (1320 × 2868) are required. The app also runs on iPad, so iPad 13" (2064 × 2752) are required too. Claude takes these from the simulator on the Mac.
+**Screenshots:** ready in [`screenshots/`](screenshots/), in the order to upload them:
+- iPhone 6.9" (1320 × 2868): `iphone-6.9-1-discover.png` … `iphone-6.9-6-activity.png`
+- iPad 13" (2064 × 2752): `ipad-13-1-discover.png` … `ipad-13-6-activity.png`. They're required because the app runs on iPad too.
+
+They show the sample projects as a live site. To make them again after changing the app, run `npm run shots` in `test/`.
 
 ## 7. App Review Information
 

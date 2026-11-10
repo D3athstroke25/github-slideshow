@@ -196,8 +196,11 @@ await block('backer: pledge, comment, save', async () => {
   const p = await newPage(390, 844);
   await signup(p, 'sam', 'Sam Lee');
   await nav(p, '#/p/' + slug);
-  await p.waitForSelector('.mobile-cta a');
-  ok('phone shows a sticky Back this project bar', /Back this project/.test(await text(p, '.mobile-cta')));
+  await p.waitForSelector('.mobile-cta.away', { state: 'attached' });
+  ok('sticky bar stays hidden while the funding panel is on screen', true);
+  await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await p.waitForSelector('.mobile-cta:not(.away) a');
+  ok('phone shows a sticky Back this project bar once the panel scrolls away', /Back this project/.test(await text(p, '.mobile-cta')));
   await p.click('.mobile-cta a');
   await p.waitForSelector('[data-act=pl-pick]');
   await shot(p, 'pledge-pick-phone');

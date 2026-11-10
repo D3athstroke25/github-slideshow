@@ -179,9 +179,11 @@ npm run test:api        # 289 checks: every database function, permissions, thro
                         # blocking and suspensions
 npm run test:functions  # 62 checks: the Edge Function with fake Stripe and Resend: Connect onboarding, Checkout,
                         # webhook signatures, charges and declines, emails and templates
-npm run test:e2e        # 112 checks in headless Chromium: the whole app, including real-payment pledges through a
+npm run test:e2e        # 113 checks in headless Chromium: the whole app, including real-payment pledges through a
                         # fake Checkout, a declined card and its fix, the shipping survey, email, reporting and
                         # blocking, moderation, and layout at phone/tablet/desktop in light and dark mode
 ```
+
+`npm run shots` renders the App Store screenshots into `native/screenshots/` from the same local database.
 
 The Edge Function is TypeScript; Node 22 runs it directly in the tests. The browser tests need Playwright with Chromium (`npx playwright install chromium`). `npm run serve` starts the app at http://127.0.0.1:8098 against the local database.
