@@ -1,7 +1,8 @@
 // Groundswell's server-side function. Deploy with JWT verification off; each route checks its
 // own caller.
-//   POST /gs/pay      the app: connect a payout account, save a card at Stripe Checkout
-//   POST /gs/webhook  Stripe events (signed with STRIPE_WEBHOOK_SECRET)
+//   POST /gs/pay      the app: connect a payout account, save a card at Stripe Checkout, buy the featured spot
+//   POST /gs/webhook  Stripe events (signed with STRIPE_WEBHOOK_SECRET); refunds and disputes are
+//                     pulled back from the creator's account
 //   POST /gs/worker   every minute from pg_cron: send queued emails, charge funded pledges
 // Secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, RESEND_API_KEY, GS_EMAIL_FROM (optional),
 // GS_APP_URL (optional). Without Stripe or Resend keys those parts simply stay off.
@@ -98,6 +99,24 @@ async function pay(req: Request): Promise<Response> {
     return json({ url: s.url });
   }
 
+  // The featured spot is paid to Groundswell itself (no connected account). Sold on the website only:
+  // inside the iPhone app it would have to be an in-app purchase.
+  if (body.action === 'feature') {
+    if (app) throw new Fail('Featuring is available on the Groundswell website.');
+    const t = await db('gs_svc_feature_target', { p_uid: user.id, p_project: body.project ?? null });
+    const to = `/dash/${t.id}?featured=1`;
+    const s = await stripe('POST', 'checkout/sessions', {
+      mode: 'payment', currency: String(t.currency).toLowerCase(), payment_method_types: ['card'],
+      customer: user.customer || undefined, customer_email: user.customer ? undefined : (user.email || undefined),
+      line_items: [{ quantity: 1, price_data: { currency: String(t.currency).toLowerCase(), unit_amount: t.price,
+        product_data: { name: `Featured on Groundswell for ${t.days} days`, description: t.title } } }],
+      success_url: back(base, to, app, true), cancel_url: back(base, `/dash/${t.id}`, app),
+      metadata: { gs_kind: 'feature', gs_project: t.id, gs_user: user.id },
+      payment_intent_data: { description: `Featured spot: ${t.title}`, metadata: { gs_kind: 'feature', gs_project: t.id } },
+    });
+    return json({ url: s.url });
+  }
+
   if (body.action === 'confirm') {
     let sid: string | null = body.session || null;
     if (!sid && body.intent) {
@@ -117,6 +136,12 @@ async function pay(req: Request): Promise<Response> {
 // A finished setup-mode Checkout: turn the intent into a pledge, or put the new card on a pledge.
 // deno-lint-ignore no-explicit-any
 async function completeSession(s: any): Promise<any> {
+  if (s.mode === 'payment' && s.metadata?.gs_kind === 'feature') {
+    if (s.status !== 'complete' || s.payment_status !== 'paid') return { done: false, status: s.status };
+    const r = await db('gs_svc_feature_paid', { p_session: s.id, p_project: s.metadata.gs_project, p_buyer: s.metadata.gs_user,
+      p_amount: s.amount_total, p_currency: String(s.currency || '').toUpperCase() });
+    return { done: true, kind: 'feature', ...r };
+  }
   if (s.mode !== 'setup' || s.status !== 'complete') return { done: false, status: s.status };
   let si = s.setup_intent;
   if (typeof si === 'string') si = await stripe('GET', `setup_intents/${si}`, { expand: ['payment_method'] });
@@ -140,7 +165,10 @@ async function webhook(req: Request): Promise<Response> {
   const evt = JSON.parse(raw);
   const o = evt.data?.object || {};
   try {
-    if (evt.type === 'checkout.session.completed' && o.mode === 'setup' && o.metadata?.gs_kind) await completeSession(o);
+    if (evt.type === 'checkout.session.completed' && o.metadata?.gs_kind) await completeSession(o);
+    else if (evt.type === 'charge.refunded') await pullBack(o.id, `refund-${o.amount_refunded}`);
+    else if (evt.type === 'charge.dispute.created') await pullBack(o.charge, `dispute-${o.id}`, true);
+    else if (evt.type === 'charge.dispute.closed' && o.status === 'won') await giveBack(o);
     else if (evt.type === 'account.updated') await db('gs_svc_account_ready', { p_account: o.id, p_ready: o.capabilities?.transfers === 'active' && o.payouts_enabled === true });
     else if (evt.type === 'payment_intent.succeeded' && o.metadata?.gs_pledge) await db('gs_svc_charge_done', { p_pledge: o.metadata.gs_pledge, p_result: 'paid', p_pi: o.id, p_error: null });
     else if (evt.type === 'payment_intent.payment_failed' && o.metadata?.gs_pledge) await db('gs_svc_charge_done', { p_pledge: o.metadata.gs_pledge, p_result: 'failed', p_pi: o.id, p_error: o.last_payment_error?.message ?? 'The payment failed.' });
@@ -150,6 +178,36 @@ async function webhook(req: Request): Promise<Response> {
     throw e;
   }
   return json({ received: true });
+}
+
+// Refunds and disputes on a pledge charge come out of Groundswell's Stripe balance first, because
+// pledges are destination charges. This takes the creator's share back from their account:
+// in proportion to the amount refunded, or all of it while a dispute is open. The platform fee
+// is not returned to the backer by Stripe, so Groundswell keeps it.
+async function pullBack(chargeId: string, key: string, dispute = false): Promise<void> {
+  if (!chargeId) return;
+  const ch = await stripe('GET', `charges/${chargeId}`, { expand: ['transfer'] });
+  const tr = ch.transfer;
+  if (!tr || typeof tr !== 'object' || !ch.metadata?.gs_pledge) return; // not a pledge charge
+  const target = dispute ? tr.amount : Math.floor(tr.amount * (ch.amount_refunded || 0) / ch.amount);
+  const owed = Math.min(target, tr.amount) - (tr.amount_reversed || 0);
+  if (owed <= 0) return;
+  await stripe('POST', `transfers/${tr.id}/reversals`, { amount: owed, metadata: { gs_reason: key, gs_pledge: ch.metadata.gs_pledge } },
+    `gs-reverse-${chargeId}-${key}`);
+}
+
+// A dispute the platform won: the money is back, so the creator gets their share again,
+// less anything refunded meanwhile.
+// deno-lint-ignore no-explicit-any
+async function giveBack(dispute: any): Promise<void> {
+  const ch = await stripe('GET', `charges/${dispute.charge}`, { expand: ['transfer'] });
+  const tr = ch.transfer;
+  if (!tr || typeof tr !== 'object' || !ch.metadata?.gs_pledge) return;
+  const keep = Math.floor(tr.amount * (ch.amount_refunded || 0) / ch.amount);
+  const amount = (tr.amount_reversed || 0) - keep;
+  if (amount <= 0) return;
+  await stripe('POST', 'transfers', { amount, currency: ch.currency, destination: tr.destination, source_transaction: ch.id,
+    metadata: { gs_reason: `dispute-won-${dispute.id}`, gs_pledge: ch.metadata.gs_pledge } }, `gs-giveback-${dispute.id}`);
 }
 
 // ------------------------------------------------------------ worker

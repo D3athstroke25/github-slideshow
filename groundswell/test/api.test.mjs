@@ -1,11 +1,12 @@
 // API tests: every Groundswell database function, called the way the app calls it.
 // Needs a local Postgres (see README.md); the database is rebuilt from the migrations first.
 import { execFileSync } from 'child_process';
+import { fileURLToPath } from 'url';
 import pg from 'pg';
 import { makePool, rpc } from './pgrpc.mjs';
 
 const PORT = Number(process.env.GS_PG_PORT || 54329);
-execFileSync(new URL('./reset-db.sh', import.meta.url).pathname, [String(PORT)], { stdio: 'inherit' });
+execFileSync(fileURLToPath(new URL('./reset-db.sh', import.meta.url)), [String(PORT)], { stdio: 'inherit' });
 const pool = makePool(PORT);
 const su = new pg.Pool({ host: '127.0.0.1', port: PORT, user: 'postgres', database: 'gs_test', max: 2 });
 const sql = async (q, a = []) => (await su.query(q, a)).rows;
@@ -758,6 +759,54 @@ await block('app review: suspending accounts', async () => {
   ok('reports show whether the author is suspended', rep && rep.comment.author_suspended === false);
   await good('gs_admin_suspend', { p_token: eve.token, p_username: 'joan', p_on: false });
   ok('lifting a suspension lets them log in again', !!(await good('gs_login', { p_username: 'joan', p_password: 'joanpassword' })).token);
+});
+
+await block('revenue: $5 minimum, tips and the featured spot', async () => {
+  await svc('gs_svc_tick', { p_email: true, p_stripe: true });
+  await good('gs_admin_settings', { p_token: eve.token, p_patch: { payments: 'stripe' } });
+  let e = await good('gs_project_new', { p_token: eve.token, p_title: 'Tip jar lamp', p_category: 'design' });
+  e = await good('gs_project_save', { p_token: eve.token, p_project: e.id, p_patch: { blurb: 'A lamp with a tip jar.', story: STORY, risks: RISKS, goal_cents: 10000 } });
+  e = await good('gs_reward_save', { p_token: eve.token, p_project: e.id, p_reward: { title: 'Pin', amount: 300 } });
+  const tp = await good('gs_project_launch', { p_token: eve.token, p_project: e.id });
+  ok('launched with real payments', tp.payments === 'stripe', tp.payments);
+  await bad('real-payment pledges start at $5', 'gs_pledge', { p_token: fay.token, p_project: tp.id, p_reward: null, p_amount: 400 }, /\$5/);
+  await bad('even for a cheaper reward', 'gs_pledge', { p_token: fay.token, p_project: tp.id, p_reward: tp.rewards[0].id, p_amount: 300 }, /\$5/);
+  await bad('tips are capped at 25%', 'gs_pledge', { p_token: fay.token, p_project: tp.id, p_reward: null, p_amount: 10000, p_tip: 3000 }, /25%/);
+  await bad('tips cannot be negative', 'gs_pledge', { p_token: fay.token, p_project: tp.id, p_reward: null, p_amount: 10000, p_tip: -1 }, /negative/);
+  const i = await good('gs_pledge', { p_token: fay.token, p_project: tp.id, p_reward: null, p_amount: 10000, p_tip: 1000 });
+  const t = await svc('gs_svc_checkout_target', { p_uid: fay.me.id, p_intent: i.intent, p_pledge: null });
+  ok('checkout shows pledge plus tip', t.amount === 11000, t);
+  const done = await svc('gs_svc_intent_complete', { p_intent: i.intent, p_customer: 'cus_fay', p_pm: 'pm_tip', p_brand: 'visa', p_last4: '4242' });
+  ok('the tip is kept on the pledge but not counted toward the goal', done.pledge.tip === 1000 && done.project.pledged === 10000, done);
+
+  const d0 = await good('gs_dashboard', { p_token: eve.token, p_project: tp.id });
+  ok('dashboard offers the featured spot', d0.feature.price === 4900 && d0.feature.days === 7 && !d0.feature.until, d0.feature);
+  ok('a backer cannot buy it for someone else\'s project', (await call('gs_svc_feature_target', { p_uid: fay.me.id, p_project: tp.id }, { role: 'service_role' })).status !== 200);
+  const ft = await svc('gs_svc_feature_target', { p_uid: eve.me.id, p_project: tp.id });
+  ok('the creator can buy it', ft.price === 4900 && ft.days === 7 && ft.currency === 'USD', ft);
+  const f1 = await svc('gs_svc_feature_paid', { p_session: 'cs_feat_1', p_project: tp.id, p_buyer: eve.me.id, p_amount: 4900, p_currency: 'USD' });
+  const f2 = await svc('gs_svc_feature_paid', { p_session: 'cs_feat_1', p_project: tp.id, p_buyer: eve.me.id, p_amount: 4900, p_currency: 'USD' });
+  ok('the same payment counts once', f1.until === f2.until && (await sql(`select count(*)::int n from feature_purchases`))[0].n === 1);
+  const row = (await sql(`select featured, featured_until > now() + interval '6 days' long from projects where id = $1`, [tp.id]))[0];
+  ok('the project is featured for a week', row.featured && row.long, row);
+  const other = (await sql(`select id, creator_id from projects where status = 'live' and id <> $1 limit 1`, [tp.id]))[0];
+  ok('nobody else can buy it while it is booked', /booked/.test((await call('gs_svc_feature_target', { p_uid: other.creator_id, p_project: other.id }, { role: 'service_role' })).body.message || ''));
+  await sql(`update projects set featured_until = now() - interval '1 minute' where id = $1`, [tp.id]);
+  await svc('gs_svc_tick', { p_email: true, p_stripe: true });
+  ok('featuring ends on its own', (await sql(`select featured, featured_until from projects where id = $1`, [tp.id]))[0].featured === false);
+
+  await sql(`update projects set deadline = now() - interval '1 minute' where id = $1`, [tp.id]);
+  await good('gs_home', {});
+  const c = (await svc('gs_svc_charges_claim', { p_limit: 10 })).find(x => x.pledge === done.pledge.id);
+  const bps = (await good('gs_config', {})).fee_bps;
+  ok('the backer is charged pledge plus tip, and Groundswell keeps fee plus tip', c.amount === 11000 && c.fee === Math.floor(10000 * bps / 10000) + 1000, c);
+  await svc('gs_svc_charge_done', { p_pledge: c.pledge, p_result: 'paid', p_pi: 'pi_tip', p_error: null });
+  const rev = (await good('gs_admin', { p_token: eve.token })).settings.revenue;
+  ok('Moderation shows fees, tips and featured sales', rev.tips === 1000 && rev.featured === 4900 && rev.fees >= Math.floor(10000 * bps / 10000), rev);
+  await bad('featured price is bounded', 'gs_admin_settings', { p_token: eve.token, p_patch: { feature_price_cents: 100 } }, /between/);
+  await good('gs_admin_settings', { p_token: eve.token, p_patch: { feature_price_cents: 2900, feature_days: 3 } });
+  const cf = await good('gs_config', {});
+  ok('admins can change the featured price and length', cf.feature_price === 2900 && cf.feature_days === 3, cf);
 });
 
 await pool.end(); await su.end();
