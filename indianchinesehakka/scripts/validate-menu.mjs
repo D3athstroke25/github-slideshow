@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // Checks data/menu.json for the kinds of errors the old site had.
-// Run: npm run menu:check   (exits 1 on errors, prints warnings)
+// Run: npm run menu:check            (exits 1 on errors, prints warnings)
+//      npm run menu:check -- --live  (also fails on active placeholder items — use before launch)
 import { readFileSync } from "node:fs";
 
 const path = new URL("../data/menu.json", import.meta.url);
 const menu = JSON.parse(readFileSync(path, "utf8"));
+const LIVE = process.argv.includes("--live");
 const errors = [];
 const warnings = [];
 const cats = new Set(menu.categories.map((c) => c.id));
@@ -39,12 +41,22 @@ for (const it of menu.items) {
   for (const [re, fix] of TYPOS) {
     if (re.test(`${it.name} ${it.description ?? ""}`)) errors.push(`${tag}: typo — should be "${fix}"`);
   }
+  for (const g of it.optionGroups ?? []) {
+    for (const c of menu.optionGroups?.[g]?.choices ?? []) {
+      if (!Number.isInteger(c.priceDelta)) errors.push(`${tag}: option "${g}/${c.id}" has no priceDelta`);
+    }
+    if (it.active && menu.optionGroups?.[g]?.placeholderPrices) {
+      (LIVE ? errors : warnings).push(`${tag}: option group "${g}" has placeholder prices`);
+    }
+  }
+  if (it.active && it.placeholder) (LIVE ? errors : warnings).push(`${tag}: PLACEHOLDER item (not a real dish/price)`);
   if (it.active && !it.image) warnings.push(`${tag}: no photo`);
   if (it.needsReview?.length) warnings.push(`${tag}: needs review — ${it.needsReview.join("; ")}`);
 }
 
 const active = menu.items.filter((i) => i.active).length;
-console.log(`${menu.items.length} items, ${active} active (target ~55)`);
+const ph = menu.items.filter((i) => i.active && i.placeholder).length;
+console.log(`${menu.items.length} items, ${active} active (target ~55), ${ph} placeholders${LIVE ? " [live mode]" : ""}`);
 for (const w of warnings) console.log("  warn ", w);
 for (const e of errors) console.log("  ERROR", e);
 process.exit(errors.length ? 1 : 0);

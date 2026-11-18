@@ -58,3 +58,11 @@ Until then, `data/menu.json` holds **only what you gave me in the brief**. I hav
 - [ ] If the Uber Direct cost exceeds the $4.99 fee, you absorb the difference? [yes, as briefed]
 - [ ] Scheduled orders: how many days ahead? [same day + next 2 days, in 15-min slots]
 - [ ] Tipping at checkout? [optional: 0 / 10 / 15 / 18%]
+
+## 5. Stage 2 decisions to confirm
+
+- [ ] **Sample menu.** 31 placeholder dishes (`"placeholder": true`) let us build and test ordering. A yellow "sample menu" banner shows site-wide until every active item is real. `npm run menu:check -- --live` fails while any placeholder is active, so it can't go live by accident.
+- [ ] **Placeholder upcharges**: Chicken +$2, Shrimp +$4, Paneer +$2, Chicken momos +$1; add-ons rice $3, naan $2.50, raita $2, egg $1.50. These are not real prices; please replace them.
+- [ ] **Combos are first** in both the pills and the page, then Best Sellers. Your brief put the combos at the top but listed Best Sellers first among the pills; I kept the two orders matching so the highlighted pill follows the scroll.
+- [ ] **Spice defaults to Medium**, so curries, biryani and tandoor items are one-tap Add. Tapping the dish name still opens the options. Hakka dishes always open the sheet, because protein and Dry/Gravy must be chosen.
+- [ ] **Delivery fee is taxed** (HST on food − discount + delivery fee), as Ontario requires for delivery charges.

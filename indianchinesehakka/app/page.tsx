@@ -1,103 +1,80 @@
-import Image from "next/image";
+import Link from "next/link";
+import { items } from "@/lib/menu";
+import { money } from "@/lib/pricing";
+import { ordering, site } from "@/config/site";
 
 export default function Home() {
+  const combos = items.filter((i) => i.category === "combos");
+  const pct = Math.round(ordering.pickup.discountRate * 100);
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <>
+      <section className="bg-red-dark text-white">
+        <div className="mx-auto max-w-6xl px-4 pt-12 pb-14 sm:pt-20 sm:pb-24">
+          <p className="inline-block rounded-full bg-gold px-3 py-1 text-sm font-extrabold text-red-dark">100% HALAL · NO ALCOHOL</p>
+          <h1 className="mt-5 max-w-3xl font-display text-5xl leading-[0.95] font-extrabold tracking-tight sm:text-7xl">
+            Hamilton’s halal <span className="text-gold">Hakka</span>, made to order.
+          </h1>
+          <p className="mt-5 max-w-xl text-lg text-white/90">
+            Indo-Chinese Hakka and North Indian, wok-fired on York Blvd. Order direct — skip the app fees
+            {ordering.pickup.discountEnabled && <> and save {pct}% on pickup</>}.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <Link
+              href="/menu"
+              className="inline-flex min-h-14 items-center rounded-full bg-gold px-8 font-display text-xl font-extrabold text-red-dark shadow-lg hover:bg-gold-soft"
+            >
+              Order Now
+            </Link>
+            <p className="text-sm font-semibold text-white/90">
+              Pickup in ~{ordering.pickup.readyMinutes} min · Delivery within {ordering.delivery.radiusKm} km
+            </p>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-4 py-12" aria-labelledby="combos-h">
+        <div className="flex items-end justify-between gap-4">
+          <h2 id="combos-h" className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+            Combos that feed you right
+          </h2>
+          <Link href="/menu#cat-combos" className="hidden min-h-12 items-center font-bold text-red underline underline-offset-4 sm:inline-flex">
+            See all
+          </Link>
+        </div>
+        <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {combos.map((c) => (
+            <li key={c.id}>
+              <Link href="/menu#cat-combos" className="flex h-full flex-col rounded-3xl bg-red p-5 text-white hover:bg-red-dark">
+                <span className="font-display text-2xl font-extrabold">{c.name}</span>
+                <span className="mt-1 flex-1 text-sm text-white/90">{c.description}</span>
+                <span className="mt-4 font-display text-3xl font-extrabold text-gold">{money(c.price ?? 0)}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mx-auto grid max-w-6xl gap-3 px-4 sm:grid-cols-3">
+        {[
+          ["Order direct, pay less", "No app markups. Your money goes to a family kitchen, not a middleman."],
+          ["Tiffin service", "Home-style meals, weekly or monthly.", "/tiffin"],
+          ["Catering", "Trays sized by headcount. Halal, of course.", "/catering"],
+        ].map(([t, d, href]) => (
+          <div key={t} className="rounded-2xl border border-line bg-card p-5">
+            <h3 className="font-display text-xl font-extrabold">{t}</h3>
+            <p className="mt-1 text-muted">{d}</p>
+            {href && (
+              <Link href={href} className="mt-3 inline-flex min-h-12 items-center font-bold text-red underline underline-offset-4">
+                Learn more
+              </Link>
+            )}
+          </div>
+        ))}
+      </section>
+
+      <p className="mx-auto mt-10 max-w-6xl px-4 text-muted">
+        {site.address.street}, {site.address.city} — {site.address.crossStreets}
+      </p>
+    </>
   );
 }
