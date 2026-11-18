@@ -1,0 +1,838 @@
+{
+  "version": 1,
+  "currency": "CAD",
+  "_note": "SAMPLE MENU. Items with \"placeholder\": true are invented stand-ins so the ordering flow can be built while the real menu is gathered (see FIXES.md #0). Their names, descriptions and prices are NOT real. `npm run menu:check -- --live` fails while any placeholder is active. price/priceDelta are in cents. active:false hides an item without deleting it.",
+  "categories": [
+    {
+      "id": "combos",
+      "name": "Combos"
+    },
+    {
+      "id": "best-sellers",
+      "name": "Best Sellers"
+    },
+    {
+      "id": "hakka",
+      "name": "Hakka (Dry/Gravy)"
+    },
+    {
+      "id": "noodles",
+      "name": "Noodles"
+    },
+    {
+      "id": "fried-rice",
+      "name": "Fried Rice"
+    },
+    {
+      "id": "momos",
+      "name": "Momos"
+    },
+    {
+      "id": "curries",
+      "name": "Curries"
+    },
+    {
+      "id": "tandoor",
+      "name": "Tandoor"
+    },
+    {
+      "id": "biryani",
+      "name": "Biryani"
+    },
+    {
+      "id": "chaat-starters",
+      "name": "Chaat & Starters"
+    },
+    {
+      "id": "drinks",
+      "name": "Drinks"
+    },
+    {
+      "id": "desserts",
+      "name": "Desserts"
+    }
+  ],
+  "optionGroups": {
+    "protein": {
+      "name": "Protein",
+      "required": true,
+      "min": 1,
+      "max": 1,
+      "choices": [
+        {
+          "id": "veg",
+          "name": "Veg",
+          "priceDelta": 0
+        },
+        {
+          "id": "chicken",
+          "name": "Chicken",
+          "priceDelta": 200
+        },
+        {
+          "id": "shrimp",
+          "name": "Shrimp",
+          "priceDelta": 400
+        },
+        {
+          "id": "paneer",
+          "name": "Paneer",
+          "priceDelta": 200
+        }
+      ],
+      "placeholderPrices": true
+    },
+    "spice": {
+      "name": "Spice level",
+      "required": true,
+      "min": 1,
+      "max": 1,
+      "default": "medium",
+      "choices": [
+        {
+          "id": "mild",
+          "name": "Mild",
+          "priceDelta": 0
+        },
+        {
+          "id": "medium",
+          "name": "Medium",
+          "priceDelta": 0
+        },
+        {
+          "id": "hot",
+          "name": "Hot",
+          "priceDelta": 0
+        },
+        {
+          "id": "desi-hot",
+          "name": "Desi Hot",
+          "priceDelta": 0
+        }
+      ]
+    },
+    "style": {
+      "name": "Dry or Gravy",
+      "required": true,
+      "min": 1,
+      "max": 1,
+      "choices": [
+        {
+          "id": "dry",
+          "name": "Dry",
+          "priceDelta": 0
+        },
+        {
+          "id": "gravy",
+          "name": "Gravy",
+          "priceDelta": 0
+        }
+      ]
+    },
+    "combo-rice-noodles": {
+      "name": "Rice or Noodles",
+      "required": true,
+      "min": 1,
+      "max": 1,
+      "choices": [
+        {
+          "id": "fried-rice",
+          "name": "Fried Rice",
+          "priceDelta": 0
+        },
+        {
+          "id": "hakka-noodles",
+          "name": "Hakka Noodles",
+          "priceDelta": 0
+        }
+      ]
+    },
+    "combo-pop": {
+      "name": "Pop",
+      "required": true,
+      "min": 1,
+      "max": 1,
+      "choices": [
+        {
+          "id": "coke",
+          "name": "Coke",
+          "priceDelta": 0
+        },
+        {
+          "id": "sprite",
+          "name": "Sprite",
+          "priceDelta": 0
+        },
+        {
+          "id": "ginger-ale",
+          "name": "Ginger Ale",
+          "priceDelta": 0
+        }
+      ],
+      "placeholderPrices": true
+    },
+    "momo-filling": {
+      "name": "Filling",
+      "required": true,
+      "min": 1,
+      "max": 1,
+      "choices": [
+        {
+          "id": "veg",
+          "name": "Veg",
+          "priceDelta": 0
+        },
+        {
+          "id": "chicken",
+          "name": "Chicken",
+          "priceDelta": 100
+        }
+      ],
+      "placeholderPrices": true
+    },
+    "combo-hakka-dish": {
+      "name": "Hakka dish",
+      "required": true,
+      "min": 1,
+      "max": 1,
+      "choices": [
+        {
+          "id": "chilli",
+          "name": "Chilli",
+          "priceDelta": 0
+        },
+        {
+          "id": "manchurian",
+          "name": "Manchurian",
+          "priceDelta": 0
+        },
+        {
+          "id": "hot-garlic",
+          "name": "Hot Garlic",
+          "priceDelta": 0
+        }
+      ],
+      "placeholderPrices": true
+    },
+    "combo-curry": {
+      "name": "Curry",
+      "required": true,
+      "min": 1,
+      "max": 1,
+      "choices": [
+        {
+          "id": "butter-chicken",
+          "name": "Butter Chicken",
+          "priceDelta": 0
+        },
+        {
+          "id": "paneer-butter-masala",
+          "name": "Paneer Butter Masala",
+          "priceDelta": 0
+        },
+        {
+          "id": "chana-masala",
+          "name": "Chana Masala",
+          "priceDelta": 0
+        }
+      ],
+      "placeholderPrices": true
+    },
+    "addons": {
+      "name": "Add-ons",
+      "required": false,
+      "min": 0,
+      "max": 4,
+      "choices": [
+        {
+          "id": "extra-rice",
+          "name": "Extra steamed rice",
+          "priceDelta": 300
+        },
+        {
+          "id": "naan",
+          "name": "Butter naan",
+          "priceDelta": 250
+        },
+        {
+          "id": "raita",
+          "name": "Raita",
+          "priceDelta": 200
+        },
+        {
+          "id": "egg",
+          "name": "Add egg",
+          "priceDelta": 150
+        }
+      ],
+      "placeholderPrices": true
+    }
+  },
+  "items": [
+    {
+      "id": "hakka-combo",
+      "name": "Hakka Combo",
+      "category": "combos",
+      "active": true,
+      "description": "Any dry Hakka dish + fried rice or Hakka noodles + a pop.",
+      "price": 1999,
+      "image": null,
+      "bestSeller": true,
+      "optionGroups": [
+        "combo-hakka-dish",
+        "protein",
+        "spice",
+        "combo-rice-noodles",
+        "combo-pop"
+      ],
+      "needsReview": [
+        "Which dry Hakka dishes are eligible?",
+        "Protein upcharges?",
+        "Pop flavours"
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "curry-combo",
+      "name": "Curry Combo",
+      "category": "combos",
+      "active": true,
+      "description": "Any curry + rice + naan.",
+      "price": 1899,
+      "image": null,
+      "optionGroups": [
+        "combo-curry",
+        "spice"
+      ],
+      "needsReview": [
+        "Which curries are eligible?",
+        "Plain or butter naan?"
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "lunch-special",
+      "name": "Lunch Special",
+      "category": "combos",
+      "active": true,
+      "description": "Available 12–3 pm.",
+      "price": 1299,
+      "image": null,
+      "availableHours": {
+        "start": "12:00",
+        "end": "15:00"
+      },
+      "needsReview": [
+        "What is in the Lunch Special?",
+        "Weekdays only or every day?"
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "family-combo",
+      "name": "Family Combo (feeds 4)",
+      "category": "combos",
+      "active": true,
+      "description": "A spread for four.",
+      "price": 5999,
+      "image": null,
+      "needsReview": [
+        "What is in the Family Combo?"
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "chilli",
+      "name": "Chilli",
+      "category": "hakka",
+      "active": true,
+      "placeholder": true,
+      "description": "Wok-tossed with green chilli, onion and peppers in a tangy soy glaze.",
+      "price": 1499,
+      "image": null,
+      "optionGroups": [
+        "protein",
+        "style",
+        "spice",
+        "addons"
+      ],
+      "bestSeller": true
+    },
+    {
+      "id": "manchurian",
+      "name": "Manchurian",
+      "category": "hakka",
+      "active": true,
+      "placeholder": true,
+      "description": "Crispy bites in a garlic-ginger Manchurian sauce.",
+      "price": 1499,
+      "image": null,
+      "optionGroups": [
+        "protein",
+        "style",
+        "spice",
+        "addons"
+      ],
+      "bestSeller": true
+    },
+    {
+      "id": "hot-garlic",
+      "name": "Hot Garlic",
+      "category": "hakka",
+      "active": true,
+      "placeholder": true,
+      "description": "Fiery red chilli and roasted garlic sauce.",
+      "price": 1499,
+      "image": null,
+      "optionGroups": [
+        "protein",
+        "style",
+        "spice",
+        "addons"
+      ]
+    },
+    {
+      "id": "honey-garlic",
+      "name": "Honey Garlic",
+      "category": "hakka",
+      "active": true,
+      "placeholder": true,
+      "description": "Sweet and sticky with a gentle garlic kick.",
+      "price": 1499,
+      "image": null,
+      "optionGroups": [
+        "protein",
+        "style",
+        "addons"
+      ]
+    },
+    {
+      "id": "schezwan",
+      "name": "Schezwan",
+      "category": "hakka",
+      "active": true,
+      "placeholder": true,
+      "description": "Bold Schezwan pepper sauce with spring onion.",
+      "price": 1549,
+      "image": null,
+      "optionGroups": [
+        "protein",
+        "style",
+        "spice",
+        "addons"
+      ]
+    },
+    {
+      "id": "hakka-noodles",
+      "name": "Hakka Noodles",
+      "category": "noodles",
+      "active": true,
+      "placeholder": true,
+      "description": "Classic street-style stir-fried noodles with crunchy veg.",
+      "price": 1299,
+      "image": null,
+      "optionGroups": [
+        "protein",
+        "spice",
+        "addons"
+      ],
+      "bestSeller": true
+    },
+    {
+      "id": "schezwan-noodles",
+      "name": "Schezwan Noodles",
+      "category": "noodles",
+      "active": true,
+      "placeholder": true,
+      "description": "Hakka noodles tossed in spicy Schezwan sauce.",
+      "price": 1349,
+      "image": null,
+      "optionGroups": [
+        "protein",
+        "spice",
+        "addons"
+      ]
+    },
+    {
+      "id": "fried-rice",
+      "name": "Fried Rice",
+      "category": "fried-rice",
+      "active": true,
+      "placeholder": true,
+      "description": "Wok-fried basmati with egg, spring onion and veg.",
+      "price": 1199,
+      "image": null,
+      "optionGroups": [
+        "protein",
+        "spice",
+        "addons"
+      ]
+    },
+    {
+      "id": "schezwan-fried-rice",
+      "name": "Schezwan Fried Rice",
+      "category": "fried-rice",
+      "active": true,
+      "placeholder": true,
+      "description": "Spicy Schezwan-style fried rice.",
+      "price": 1299,
+      "image": null,
+      "optionGroups": [
+        "protein",
+        "spice",
+        "addons"
+      ],
+      "bestSeller": true
+    },
+    {
+      "id": "steamed-momos",
+      "name": "Steamed Momos (8)",
+      "category": "momos",
+      "active": true,
+      "placeholder": true,
+      "description": "Hand-folded dumplings with spicy tomato chutney.",
+      "price": 1099,
+      "image": null,
+      "optionGroups": [
+        "momo-filling"
+      ]
+    },
+    {
+      "id": "fried-momos",
+      "name": "Fried Momos (8)",
+      "category": "momos",
+      "active": true,
+      "placeholder": true,
+      "description": "Crispy golden momos with chutney.",
+      "price": 1199,
+      "image": null,
+      "optionGroups": [
+        "momo-filling"
+      ]
+    },
+    {
+      "id": "chilli-momos",
+      "name": "Chilli Momos",
+      "category": "momos",
+      "active": true,
+      "placeholder": true,
+      "description": "Fried momos tossed Hakka-style in chilli sauce.",
+      "price": 1299,
+      "image": null,
+      "optionGroups": [
+        "momo-filling",
+        "spice"
+      ]
+    },
+    {
+      "id": "butter-chicken",
+      "name": "Butter Chicken",
+      "category": "curries",
+      "active": true,
+      "placeholder": true,
+      "description": "Tandoori chicken in a silky tomato-butter gravy.",
+      "price": 1599,
+      "image": null,
+      "optionGroups": [
+        "spice",
+        "addons"
+      ],
+      "bestSeller": true
+    },
+    {
+      "id": "paneer-butter-masala",
+      "name": "Paneer Butter Masala",
+      "category": "curries",
+      "active": true,
+      "placeholder": true,
+      "description": "Soft paneer cubes in creamy makhani gravy.",
+      "price": 1499,
+      "image": null,
+      "optionGroups": [
+        "spice",
+        "addons"
+      ],
+      "vegetarian": true
+    },
+    {
+      "id": "chana-masala",
+      "name": "Chana Masala",
+      "category": "curries",
+      "active": true,
+      "placeholder": true,
+      "description": "Chickpeas slow-cooked with onion, tomato and whole spices.",
+      "price": 1299,
+      "image": null,
+      "optionGroups": [
+        "spice",
+        "addons"
+      ],
+      "vegetarian": true
+    },
+    {
+      "id": "dal-makhani",
+      "name": "Dal Makhani",
+      "category": "curries",
+      "active": true,
+      "placeholder": true,
+      "description": "Black lentils simmered overnight with butter and cream.",
+      "price": 1299,
+      "image": null,
+      "optionGroups": [
+        "spice",
+        "addons"
+      ],
+      "vegetarian": true
+    },
+    {
+      "id": "lamb-curry",
+      "name": "Lamb Curry",
+      "category": "curries",
+      "active": true,
+      "placeholder": true,
+      "description": "Tender halal lamb in a rich onion-tomato masala.",
+      "price": 1799,
+      "image": null,
+      "optionGroups": [
+        "spice",
+        "addons"
+      ]
+    },
+    {
+      "id": "tandoori-chicken",
+      "name": "Tandoori Chicken (half)",
+      "category": "tandoor",
+      "active": true,
+      "placeholder": true,
+      "description": "Yogurt-marinated, charred in the clay oven.",
+      "price": 1499,
+      "image": null,
+      "optionGroups": [
+        "spice"
+      ]
+    },
+    {
+      "id": "chicken-tikka",
+      "name": "Chicken Tikka",
+      "category": "tandoor",
+      "active": true,
+      "placeholder": true,
+      "description": "Boneless chicken, smoky tandoor char.",
+      "price": 1499,
+      "image": null,
+      "optionGroups": [
+        "spice"
+      ]
+    },
+    {
+      "id": "butter-naan",
+      "name": "Butter Naan",
+      "category": "tandoor",
+      "active": true,
+      "placeholder": true,
+      "description": "Fresh from the tandoor.",
+      "price": 299,
+      "image": null,
+      "vegetarian": true
+    },
+    {
+      "id": "garlic-naan",
+      "name": "Garlic Naan",
+      "category": "tandoor",
+      "active": true,
+      "placeholder": true,
+      "description": "Brushed with garlic butter and cilantro.",
+      "price": 349,
+      "image": null,
+      "vegetarian": true
+    },
+    {
+      "id": "chicken-biryani",
+      "name": "Chicken Biryani",
+      "category": "biryani",
+      "active": true,
+      "placeholder": true,
+      "description": "Dum-cooked basmati layered with spiced halal chicken. Served with raita.",
+      "price": 1599,
+      "image": null,
+      "optionGroups": [
+        "spice"
+      ],
+      "bestSeller": true
+    },
+    {
+      "id": "lamb-biryani",
+      "name": "Lamb Biryani",
+      "category": "biryani",
+      "active": true,
+      "description": "Dum-cooked basmati layered with slow-cooked halal lamb. Served with raita.",
+      "price": 1699,
+      "image": null,
+      "optionGroups": [
+        "spice"
+      ],
+      "needsReview": [
+        "Description is a placeholder"
+      ],
+      "fix": "Duplicate on old site removed; kept one at $16.99 per brief.",
+      "placeholder": false,
+      "bestSeller": true
+    },
+    {
+      "id": "veg-biryani",
+      "name": "Veg Biryani",
+      "category": "biryani",
+      "active": true,
+      "placeholder": true,
+      "description": "Fragrant basmati with seasonal vegetables. Served with raita.",
+      "price": 1399,
+      "image": null,
+      "optionGroups": [
+        "spice"
+      ],
+      "vegetarian": true
+    },
+    {
+      "id": "samosa",
+      "name": "Samosa (2)",
+      "category": "chaat-starters",
+      "active": true,
+      "placeholder": true,
+      "description": "Crisp pastry with spiced potato and peas.",
+      "price": 599,
+      "image": null,
+      "vegetarian": true
+    },
+    {
+      "id": "veg-pakora",
+      "name": "Veg Pakora",
+      "category": "chaat-starters",
+      "active": true,
+      "placeholder": true,
+      "description": "Onion and spinach fritters with mint chutney.",
+      "price": 699,
+      "image": null,
+      "vegetarian": true
+    },
+    {
+      "id": "chilli-chicken-wings",
+      "name": "Chilli Wings (8)",
+      "category": "chaat-starters",
+      "active": true,
+      "placeholder": true,
+      "description": "Crispy wings tossed in Hakka chilli sauce.",
+      "price": 1299,
+      "image": null,
+      "optionGroups": [
+        "spice"
+      ]
+    },
+    {
+      "id": "mango-lassi",
+      "name": "Mango Lassi",
+      "category": "drinks",
+      "active": true,
+      "placeholder": true,
+      "description": "Chilled yogurt and mango.",
+      "price": 499,
+      "image": null
+    },
+    {
+      "id": "pop",
+      "name": "Pop (can)",
+      "category": "drinks",
+      "active": true,
+      "placeholder": true,
+      "description": "Coke, Sprite or Ginger Ale.",
+      "price": 199,
+      "image": null,
+      "optionGroups": [
+        "combo-pop"
+      ]
+    },
+    {
+      "id": "masala-chai",
+      "name": "Masala Chai",
+      "category": "drinks",
+      "active": true,
+      "placeholder": true,
+      "description": "Spiced milk tea.",
+      "price": 299,
+      "image": null
+    },
+    {
+      "id": "gulab-jamun",
+      "name": "Gulab Jamun (2)",
+      "category": "desserts",
+      "active": true,
+      "placeholder": true,
+      "description": "Warm milk dumplings in rose-cardamom syrup.",
+      "price": 449,
+      "image": null,
+      "vegetarian": true
+    },
+    {
+      "id": "rasmalai",
+      "name": "Rasmalai (2)",
+      "category": "desserts",
+      "active": true,
+      "placeholder": true,
+      "description": "Soft cheese patties in saffron milk.",
+      "price": 549,
+      "image": null,
+      "vegetarian": true
+    },
+    {
+      "id": "mango-juice",
+      "name": "Mango Juice",
+      "category": "drinks",
+      "active": false,
+      "description": "",
+      "price": null,
+      "image": null,
+      "needsReview": [
+        "Price — old site showed $400. Hidden (active:false) until you set it."
+      ],
+      "fix": "$400 → [PRICE]"
+    },
+    {
+      "id": "honey-chili-potato",
+      "name": "Honey Chili Potato",
+      "category": "chaat-starters",
+      "active": false,
+      "description": "",
+      "price": null,
+      "image": null,
+      "needsReview": [
+        "Price",
+        "Photo — old site photo did not match; needs a real photo"
+      ]
+    },
+    {
+      "id": "chana-bhatura",
+      "name": "Chana Bhatura",
+      "category": "chaat-starters",
+      "active": false,
+      "description": "",
+      "price": null,
+      "image": null,
+      "needsReview": [
+        "Price",
+        "Photo — old site photo did not match; needs a real photo"
+      ]
+    },
+    {
+      "id": "samosa-chaat",
+      "name": "Samosa Chaat",
+      "category": "chaat-starters",
+      "active": false,
+      "description": "",
+      "price": null,
+      "image": null,
+      "needsReview": [
+        "Price",
+        "Photo — old site photo did not match; needs a real photo"
+      ]
+    }
+  ]
+}
