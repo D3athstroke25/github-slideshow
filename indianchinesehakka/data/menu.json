@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "currency": "CAD",
+  "_note": "Stage 1 seed. The old site could not be imported (see FIXES.md #0). Only items/prices you gave in the brief are filled in; everything else is null + needsReview until you supply the real menu. price is in cents. Set active:false to hide an item without deleting it.",
+  "categories": [
+    { "id": "best-sellers", "name": "Best Sellers" },
+    { "id": "combos", "name": "Combos" },
+    { "id": "hakka", "name": "Hakka (Dry/Gravy)" },
+    { "id": "noodles", "name": "Noodles" },
+    { "id": "fried-rice", "name": "Fried Rice" },
+    { "id": "momos", "name": "Momos" },
+    { "id": "curries", "name": "Curries" },
+    { "id": "tandoor", "name": "Tandoor" },
+    { "id": "biryani", "name": "Biryani" },
+    { "id": "chaat-starters", "name": "Chaat & Starters" },
+    { "id": "drinks", "name": "Drinks" },
+    { "id": "desserts", "name": "Desserts" }
+  ],
+  "optionGroups": {
+    "protein": { "name": "Protein", "required": true, "min": 1, "max": 1, "choices": [
+      { "id": "veg", "name": "Veg", "priceDelta": 0 },
+      { "id": "chicken", "name": "Chicken", "priceDelta": null },
+      { "id": "shrimp", "name": "Shrimp", "priceDelta": null },
+      { "id": "paneer", "name": "Paneer", "priceDelta": null }
+    ]},
+    "spice": { "name": "Spice level", "required": true, "min": 1, "max": 1, "default": "medium", "choices": [
+      { "id": "mild", "name": "Mild", "priceDelta": 0 },
+      { "id": "medium", "name": "Medium", "priceDelta": 0 },
+      { "id": "hot", "name": "Hot", "priceDelta": 0 },
+      { "id": "desi-hot", "name": "Desi Hot", "priceDelta": 0 }
+    ]},
+    "style": { "name": "Dry or Gravy", "required": true, "min": 1, "max": 1, "choices": [
+      { "id": "dry", "name": "Dry", "priceDelta": 0 },
+      { "id": "gravy", "name": "Gravy", "priceDelta": 0 }
+    ]},
+    "combo-rice-noodles": { "name": "Rice or Noodles", "required": true, "min": 1, "max": 1, "choices": [
+      { "id": "fried-rice", "name": "Fried Rice", "priceDelta": 0 },
+      { "id": "hakka-noodles", "name": "Hakka Noodles", "priceDelta": 0 }
+    ]},
+    "combo-pop": { "name": "Pop", "required": true, "min": 1, "max": 1, "choices": [
+      { "id": "pop", "name": "Can of pop (flavours TBC)", "priceDelta": 0 }
+    ]}
+  },
+  "items": [
+    {
+      "id": "hakka-combo", "name": "Hakka Combo", "category": "combos", "active": true,
+      "description": "Any dry Hakka dish + fried rice or Hakka noodles + a pop.",
+      "price": 1999, "image": null, "bestSeller": true,
+      "optionGroups": ["protein", "spice", "combo-rice-noodles", "combo-pop"],
+      "needsReview": ["Which dry Hakka dishes are eligible?", "Protein upcharges?", "Pop flavours"]
+    },
+    {
+      "id": "curry-combo", "name": "Curry Combo", "category": "combos", "active": true,
+      "description": "Any curry + rice + naan.",
+      "price": 1899, "image": null,
+      "optionGroups": ["spice"],
+      "needsReview": ["Which curries are eligible?", "Plain or butter naan?"]
+    },
+    {
+      "id": "lunch-special", "name": "Lunch Special", "category": "combos", "active": true,
+      "description": "Available 12–3 pm.",
+      "price": 1299, "image": null, "availableHours": { "start": "12:00", "end": "15:00" },
+      "needsReview": ["What is in the Lunch Special?", "Weekdays only or every day?"]
+    },
+    {
+      "id": "family-combo", "name": "Family Combo (feeds 4)", "category": "combos", "active": true,
+      "description": "A spread for four.",
+      "price": 5999, "image": null,
+      "needsReview": ["What is in the Family Combo?"]
+    },
+    {
+      "id": "lamb-biryani", "name": "Lamb Biryani", "category": "biryani", "active": true,
+      "description": "", "price": 1699, "image": null, "optionGroups": ["spice"],
+      "needsReview": ["Description"],
+      "fix": "Duplicate on old site removed; kept one at $16.99 per brief."
+    },
+    {
+      "id": "mango-juice", "name": "Mango Juice", "category": "drinks", "active": false,
+      "description": "", "price": null, "image": null,
+      "needsReview": ["Price — old site showed $400. Hidden (active:false) until you set it."],
+      "fix": "$400 → [PRICE]"
+    },
+    {
+      "id": "honey-chili-potato", "name": "Honey Chili Potato", "category": "chaat-starters", "active": false,
+      "description": "", "price": null, "image": null,
+      "needsReview": ["Price", "Photo — old site photo did not match; needs a real photo"]
+    },
+    {
+      "id": "chana-bhatura", "name": "Chana Bhatura", "category": "chaat-starters", "active": false,
+      "description": "", "price": null, "image": null,
+      "needsReview": ["Price", "Photo — old site photo did not match; needs a real photo"]
+    },
+    {
+      "id": "samosa-chaat", "name": "Samosa Chaat", "category": "chaat-starters", "active": false,
+      "description": "", "price": null, "image": null,
+      "needsReview": ["Price", "Photo — old site photo did not match; needs a real photo"]
+    }
+  ]
+}
